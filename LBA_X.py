@@ -1,5 +1,6 @@
 import math
-from antpat.io.nec2 import StructureModel, VoltageSource, FreqSteps, Wire, ExecutionBlock, RadPatternSpec
+from nec2 import (StructureModel, VoltageSource, FreqSteps, Wire,
+                  ExecutionBlock, RadPatternSpec)
 
 puck_width = 0.090
 puck_height = 1.6
