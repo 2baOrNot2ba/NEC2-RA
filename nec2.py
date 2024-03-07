@@ -540,6 +540,7 @@ class StructureModel:
         self.excited_elements = []
         self.comments = []
         self.ground = None
+        self._last_tag_nr = 0
     
     def set_commentline(self, comment):
         self.comments.append(comment)
@@ -547,23 +548,31 @@ class StructureModel:
     def set_ground(self, grnd=Ground(1, 0, 0, 0)):
         self.ground = grnd    
 
-    def _assign_seq_tags(self):
+    def _assign_tags_base(self):
         """\
         Assign sequential tag nrs to base groups and set up element tags
         """
-        last_tag_nr = 0
+        last_tag_nr = self._last_tag_nr
         # Set tags for non element groups
         nonelemgrps = set(self.groups)-set(self.element)
         inc = 1
         for last_tag_nr, gid in enumerate(nonelemgrps, start=last_tag_nr+inc):
             self.groups[gid]._tag_nr = last_tag_nr
-        # Set tags for element groups
+        self._last_tag_nr = last_tag_nr
+
+    def _assign_tags_elem(self):
+        """\
+        Assign sequential tag nrs to array elements and set up element tags
+        """        
+        # Set tags for element group
+        last_tag_nr = self._last_tag_nr
         inc = 10**len(str(last_tag_nr))
         #inc = 1  # REMOVE this test 
         elem_tags_start = last_tag_nr+inc
         for last_tag_nr, gid in enumerate(self.element, start=last_tag_nr+inc):
             self.groups[gid]._tag_nr = last_tag_nr
         self.elements_tags[0] = list(range(elem_tags_start, last_tag_nr+1))
+        self._last_tag_nr = last_tag_nr
         nr_elem_tags = len(self.elements_tags[0])
         for elem_nr in range(1, len(self.arr_delta_pos)):
             elem_tags_start += nr_elem_tags
@@ -587,7 +596,7 @@ class StructureModel:
         max_nrseg = self.nrsegs_hints(min_seg_perlambda, max_frequency)
         for gid, pid in max_nrseg:
             self.groups[gid].parts[pid].nr_seg = max_nrseg[(gid, pid)]
-        self._assign_seq_tags()
+        self._assign_tags_base()
         return max_nrseg
     
     def _port_group(self, port_name):
@@ -631,6 +640,7 @@ class StructureModel:
             delta_pos = [pos_to[idx]-pos_from[idx] for idx in range(3)] 
             self.arr_delta_pos.append(delta_pos)
             pos_from = pos_to
+        self._assign_tags_elem()
 
     def as_neccards(self):
 
