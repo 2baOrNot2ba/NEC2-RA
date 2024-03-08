@@ -39,7 +39,7 @@ _frq_cntr_step = FreqSteps('lin', nr_freqs, 50.0, 2.0)
 lba_model.segmentalize(201, frq_cntr)
 _port_ex = ('LNA_x', VoltageSource(1.0))
 nr_ants = len(arr_pos)
-_epl = RadPatternSpec(nth=3, dth=1.0, nph=2, dph=3., phis=90.)
+_epl = RadPatternSpec(nth=3, dth=1.0, nph=0, dph=3., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
 
 eeps = lba_model.calc_eeps(ExecutionBlock(_frq_cntr_step, _port_ex, _epl),
@@ -47,23 +47,24 @@ eeps = lba_model.calc_eeps(ExecutionBlock(_frq_cntr_step, _port_ex, _epl),
 for antnr in range(nr_ants):
     eep =  eeps[antnr]
     print("Antenna nr:", antnr)
-    print('Frequency:', eep.freqs)
-    print('Radpats', len(eep.thetas), len(eep.phis))
-    if PRINT_inpparm:
-        print('Impedance', eep.inp_Z)
-        print('Current', eep.inp_I)
-        print('Voltage', eep.inp_V)
-    if PRINT_radpat:
-        print('E_theta_amp', np.abs(eep.ef_tht))
-        print('E_theta_phs', np.angle(eep.ef_tht))
-        print('E_phi_amp', np.abs(eep.ef_phi))
-        print('E_phi_phs', np.angle(eep.ef_phi))
-        #_e = [cmath.polar(e_i) for e_i in eep.ef_phi]
-        #e_vert_ampphs_str = [(e_i[0],
-        #                      math.degrees(e_i[1]-0*_e[0][1])) 
-        #                      for e_i in _e] 
-        #print('Theta [deg], Voltage [V (amp, rel.phas/deg)]')
-        #for _p in zip(eep.thetas, e_vert_ampphs_str):
-        #    print(*_p)
-    if (PRINT_inpparm or PRINT_radpat) and antnr+1 < nr_ants:
-        print()
+    for fidx, frq in enumerate(eep.freqs):
+        print('Frequency:', frq)
+        print('Radpats', eep.thetas[fidx].shape, eep.phis[fidx].shape)
+        if PRINT_inpparm:
+            print('Impedance', eep.inp_Z)
+            print('Current', eep.inp_I)
+            print('Voltage', eep.inp_V)
+        if PRINT_radpat:
+            print('E_theta_amp', np.abs(eep.ef_tht[fidx]))
+            print('E_theta_phs', np.angle(eep.ef_tht[fidx]))
+            print('E_phi_amp', np.abs(eep.ef_phi[fidx]))
+            print('E_phi_phs', np.angle(eep.ef_phi[fidx]))
+            #_e = [cmath.polar(e_i) for e_i in eep.ef_phi]
+            #e_vert_ampphs_str = [(e_i[0],
+            #                      math.degrees(e_i[1]-0*_e[0][1])) 
+            #                      for e_i in _e] 
+            #print('Theta [deg], Voltage [V (amp, rel.phas/deg)]')
+            #for _p in zip(eep.thetas, e_vert_ampphs_str):
+            #    print(*_p)
+        if (PRINT_inpparm or PRINT_radpat) and antnr+1 < nr_ants:
+            print()

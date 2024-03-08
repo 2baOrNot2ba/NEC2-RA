@@ -839,7 +839,7 @@ class StructureModel:
                     ef_hori_fr = ef_hori_fr.reshape((len(thetas), len(phis)))
                     ef_hori.append(ef_hori_fr)
                     ef_vert.append(ef_vert_fr)
-                results.append(NECout(frequency, thetas, phis,
+                results.append(NECout(freqs, thetas, phis,
                                       np.array(ef_vert), np.array(ef_hori),
                                       inp_V=V, inp_I=I, inp_Z=Z))
         return results
