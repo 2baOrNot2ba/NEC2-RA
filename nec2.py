@@ -825,11 +825,13 @@ class StructureModel:
                 nr_freqs = len(freqs)
                 for f in range(nr_freqs):
                     inp_parms = nec_context.get_input_parameters(f)
-                    frequency = inp_parms.get_frequency()
+                    #frequency = inp_parms.get_frequency()
                     Z = inp_parms.get_impedance()
                     I = inp_parms.get_current()
                     V = inp_parms.get_voltage()
                     radpat_out = nec_context.get_radiation_pattern(f)
+                    # Coordinates theta,phi are the same for all frequecies,
+                    # but easiest to just get it for each freq spec.
                     thetas = radpat_out.get_theta_angles()
                     phis = radpat_out.get_phi_angles()
 

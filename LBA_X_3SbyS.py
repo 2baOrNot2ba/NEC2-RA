@@ -4,7 +4,7 @@ import numpy as np
 from nec2 import (StructureModel, VoltageSource, FreqSteps, Wire,
                   ExecutionBlock, RadPatternSpec)
 
-PRINT_inpparm = True
+PRINT_inpparm = False
 PRINT_radpat = True
 
 puck_width = 0.090
@@ -35,7 +35,7 @@ lba_model.arrayify(element=['ant_X','puck'],
                    array_positions=arr_pos)
 nr_freqs = 1
 frq_cntr = 50.0
-_frq_cntr_step = FreqSteps('lin', nr_freqs, 50.0, 2.0)
+_frq_cntr_step = FreqSteps('lin', nr_freqs, frq_cntr, 2.0)
 lba_model.segmentalize(201, frq_cntr)
 _port_ex = ('LNA_x', VoltageSource(1.0))
 nr_ants = len(arr_pos)
@@ -44,27 +44,30 @@ print('Wavelength', 3e2/frq_cntr)
 
 eeps = lba_model.calc_eeps(ExecutionBlock(_frq_cntr_step, _port_ex, _epl),
                            save_necfile=True)
+refantnr = 0
 for antnr in range(nr_ants):
     eep =  eeps[antnr]
     print("Antenna nr:", antnr)
     for fidx, frq in enumerate(eep.freqs):
-        print('Frequency:', frq)
-        print('Radpats', eep.thetas[fidx].shape, eep.phis[fidx].shape)
+        indent = '  '
+        print(indent+'Frequency:', frq)
+        #print(2*indent+'Radpats', eep.thetas.shape, eep.phis.shape)
         if PRINT_inpparm:
-            print('Impedance', eep.inp_Z)
-            print('Current', eep.inp_I)
-            print('Voltage', eep.inp_V)
+            print(2*indent+'Impedance', eep.inp_Z)
+            print(2*indent+'Current', eep.inp_I)
+            print(2*indent+'Voltage', eep.inp_V)
         if PRINT_radpat:
-            print('E_theta_amp', np.abs(eep.ef_tht[fidx]))
-            print('E_theta_phs', np.angle(eep.ef_tht[fidx]))
-            print('E_phi_amp', np.abs(eep.ef_phi[fidx]))
-            print('E_phi_phs', np.angle(eep.ef_phi[fidx]))
-            #_e = [cmath.polar(e_i) for e_i in eep.ef_phi]
-            #e_vert_ampphs_str = [(e_i[0],
-            #                      math.degrees(e_i[1]-0*_e[0][1])) 
-            #                      for e_i in _e] 
-            #print('Theta [deg], Voltage [V (amp, rel.phas/deg)]')
-            #for _p in zip(eep.thetas, e_vert_ampphs_str):
-            #    print(*_p)
-        if (PRINT_inpparm or PRINT_radpat) and antnr+1 < nr_ants:
-            print()
+            #print('E_theta_amp', np.abs(eep.ef_tht[fidx]))
+            #print('E_theta_phs', np.rad2deg(np.angle(eep.ef_tht[fidx])))
+            print('Theta, Phi:')
+            thetagrd , phigrd = np.meshgrid(eep.thetas, eep.phis)
+            #print(thetagrd, phigrd)
+            print(2*indent+'E_phi_amp')
+            print(3*indent, str(np.abs(eep.ef_phi[fidx])
+                                ).replace('\n', '\n'+3*indent))
+            print(2*indent+'E_phi_phs')
+            _ref_phases = np.angle(eeps[refantnr].ef_phi[fidx])
+            print(3*indent, str(np.rad2deg(np.angle(
+                eep.ef_phi[fidx])-_ref_phases)
+                                ).replace('\n', '\n'+3*indent))
+    print()
