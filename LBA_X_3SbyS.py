@@ -1,5 +1,6 @@
 import math
 import cmath
+import numpy as np
 from nec2 import (StructureModel, VoltageSource, FreqSteps, Wire,
                   ExecutionBlock, RadPatternSpec)
 
@@ -28,42 +29,41 @@ lba_model['ant_X']['-X'] = Wire(*l12, wire_radius)
 lba_model['puck']['LNA_connect'] = Wire(*l23, wire_radius)
 lba_model['ant_X']['+X'] = Wire(*l34, wire_radius)
 lba_model['puck']['LNA_connect'].add_port(0.5, 'LNA_x', VoltageSource(1.0))
+
+arr_pos =[[0.,0.,0.], [0., 2., 0.],[0.,4.,0.]]
 lba_model.arrayify(element=['ant_X','puck'],
-                   array_positions=[[0.,0.,0.], [0., 2., 0.],[0.,4.,0.]])
-_frq_cntr = FreqSteps('lin', 1, 50.0, 1.0)
-_epl = RadPatternSpec(nth=3, dth=10, phis=0.)
-print('SEGMENTS', lba_model.segmentalize(201, _frq_cntr.max_freq()))
+                   array_positions=arr_pos)
+nr_freqs = 1
+frq_cntr = 50.0
+_frq_cntr_step = FreqSteps('lin', nr_freqs, 50.0, 2.0)
+lba_model.segmentalize(201, frq_cntr)
+_port_ex = ('LNA_x', VoltageSource(1.0))
+nr_ants = len(arr_pos)
+_epl = RadPatternSpec(nth=3, dth=1.0, nph=2, dph=3., phis=90.)
+print('Wavelength', 3e2/frq_cntr)
 
-for antnr in range(3):
-    _prt_exc = ((antnr, 'LNA_x'), VoltageSource(2.0))
-    _xb = ExecutionBlock(_frq_cntr, [_prt_exc], _epl)
-    lba_model.add_executionblock('xb0' , _xb, reset=True)
+eeps = lba_model.calc_eeps(ExecutionBlock(_frq_cntr_step, _port_ex, _epl),
+                           save_necfile=True)
+for antnr in range(nr_ants):
+    eep =  eeps[antnr]
     print("Antenna nr:", antnr)
-    deck = lba_model.as_neccards()
-    deck.save_necfile(lba_model.name+str(antnr))
-    for nec_context in deck.exec_pynec():
-        for f in range(1):
-            if PRINT_inpparm:
-                inp_parms = nec_context.get_input_parameters(f)
-                print('Frequency:', inp_parms.get_frequency())
-
-                Z = inp_parms.get_impedance()[0]
-                I = inp_parms.get_current()[0]
-                V = inp_parms.get_voltage()[0]
-                print('Impedance', Z)
-                print('Current', I)
-                print('Voltage', V, I*Z)
-            if PRINT_radpat:
-                radpat_out = nec_context.get_radiation_pattern(f)
-                e_vert = radpat_out.get_e_theta()
-                _e = [cmath.polar(e_i) for e_i in e_vert]
-                e_vert_ampphs_str = [(e_i[0], math.degrees(e_i[1]-0*_e[0][1])) 
-                                     for e_i in _e] 
-
-                print('Theta [deg], Voltage [V (amp, rel.phas/deg)]')
-                for _p in zip(radpat_out.get_theta_angles(),
-                              e_vert_ampphs_str):
-                    print(*_p)
-            print()
-
-#print(dir(inp_parms))
+    print('Frequency:', eep.freqs)
+    print('Radpats', len(eep.thetas), len(eep.phis))
+    if PRINT_inpparm:
+        print('Impedance', eep.inp_Z)
+        print('Current', eep.inp_I)
+        print('Voltage', eep.inp_V)
+    if PRINT_radpat:
+        print('E_theta_amp', np.abs(eep.ef_tht))
+        print('E_theta_phs', np.angle(eep.ef_tht))
+        print('E_phi_amp', np.abs(eep.ef_phi))
+        print('E_phi_phs', np.angle(eep.ef_phi))
+        #_e = [cmath.polar(e_i) for e_i in eep.ef_phi]
+        #e_vert_ampphs_str = [(e_i[0],
+        #                      math.degrees(e_i[1]-0*_e[0][1])) 
+        #                      for e_i in _e] 
+        #print('Theta [deg], Voltage [V (amp, rel.phas/deg)]')
+        #for _p in zip(eep.thetas, e_vert_ampphs_str):
+        #    print(*_p)
+    if (PRINT_inpparm or PRINT_radpat) and antnr+1 < nr_ants:
+        print()

@@ -1,8 +1,10 @@
+import math
+import cmath
 from dataclasses import dataclass, astuple
 import typing
 import pathlib
 import numpy as np
-import PyNEC
+#import PyNEC
 
 PRGINPS = {'STGEOM', 'PCNTRL'}
 CARDS_COMMT = {'CE', 'CM'}
@@ -358,10 +360,20 @@ class Transformations:
 
 @dataclass
 class FreqSteps:
-    steptype: str = 'lin'  # linear or 'log' multiplicative
+    steptype: str = 'lin'  # linear or 'exp' multiplicative
     nrsteps: int = 1
     start: float = 299.8  # MHz
     incr: float = 1.
+
+    def aslist(self):
+        frqlist = []
+        for fi in range(self.nrsteps):
+            if self.steptype == 'lin':
+                frq = self.start+self.incr*fi
+            else:
+                frq = self.start*self.incr**fi
+            frqlist.append(frq)
+        return frqlist
 
     def max_freq(self):
         _max_freq = (self.start+self.incr*(self.nrsteps-1)
@@ -372,7 +384,7 @@ class FreqSteps:
     def to_nec_type(self):
         if self.steptype == 'lin':
             return 0
-        elif self.steptype == 'log':
+        elif self.steptype == 'exp':
             return 1
     
     def from_nec_type(self):
@@ -425,6 +437,21 @@ class ExecutionBlock:
     freqsteps: FreqSteps = FreqSteps()  # Should at least have this
     exciteports: typing.List = None
     radpat: RadPatternSpec = None
+
+    def nrexcitedports(self):
+        return len(self.exciteports)
+
+
+@dataclass
+class NECout:
+    freqs: typing.List
+    thetas: typing.List
+    phis: typing.List
+    ef_tht: typing.List
+    ef_phi: typing.List
+    inp_V: complex = None
+    inp_I: complex = None
+    inp_Z: complex = None
 
 
 class TaggedGroup:
@@ -775,6 +802,47 @@ class StructureModel:
         # END
         d.append_card('EN', 0)
         return d
+    
+    def calc_eeps(self, eep_eb, save_necfile=False):
+        """Calculate embedded element patterns (EEPs) for array"""
+
+        _frq_cntr_step = eep_eb.freqsteps
+        _exciteport_name, _vltsrc = eep_eb.exciteports
+        _rad_pat = eep_eb.radpat
+        nr_ants = len(self.arr_delta_pos)
+        results = []
+        for antnr in range(nr_ants):
+            _prt_exc = ((antnr, _exciteport_name), _vltsrc)
+            _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat)
+            self.add_executionblock('xb'+str(antnr), _xb, reset=True)
+            _deck = self.as_neccards()
+            if save_necfile:
+                _deck.save_necfile(self.name+str(antnr))
+            for nec_context in _deck.exec_pynec():
+                ef_vert = []
+                ef_hori = []
+                freqs = _frq_cntr_step.aslist()
+                nr_freqs = len(freqs)
+                for f in range(nr_freqs):
+                    inp_parms = nec_context.get_input_parameters(f)
+                    frequency = inp_parms.get_frequency()
+                    Z = inp_parms.get_impedance()
+                    I = inp_parms.get_current()
+                    V = inp_parms.get_voltage()
+                    radpat_out = nec_context.get_radiation_pattern(f)
+                    thetas = radpat_out.get_theta_angles()
+                    phis = radpat_out.get_phi_angles()
+
+                    ef_vert_fr = np.array(radpat_out.get_e_theta())
+                    ef_vert_fr = ef_vert_fr.reshape((len(thetas), len(phis)))
+                    ef_hori_fr = np.array(radpat_out.get_e_phi())
+                    ef_hori_fr = ef_hori_fr.reshape((len(thetas), len(phis)))
+                    ef_hori.append(ef_hori_fr)
+                    ef_vert.append(ef_vert_fr)
+                results.append(NECout(frequency, thetas, phis,
+                                      np.array(ef_vert), np.array(ef_hori),
+                                      inp_V=V, inp_I=I, inp_Z=Z))
+        return results
 
     def __getitem__(self, group_id):
         if type(group_id) == str:
@@ -809,20 +877,3 @@ class StructureModel:
             for p in _gs.parts:
                 out.append(2*indent+"part: "+str(_gs.parts[p]))
         return '\n'.join(out)
-
-#----
-
-class Nec2Out:
-    def __init__(self) -> None:
-        pass
-
-    @classmethod
-    def load_nec(cls):
-        return cls()
-
-
-def load(filename, cardformat='CSV'):
-    with open(filename) as file:
-        deck = Deck()
-        deck.load_necfile(file, cardformat)
-    return deck
