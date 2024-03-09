@@ -54,16 +54,9 @@ def test_StructureModel():
     l23 = (p2, p3)
     l34 = (p3, p4)
     wire_rad = 0.001
-    #bob1 = model.newtag('bob1')
-    #bob1.make_wire(*l12, wire_rad, name='+X', nr_seg=100)
     model['xing']['X+'] = Wire(*l12, wire_rad)
-    #main = model.newtag('main')
-    #main.make_wire(*l23, wire_rad, name='mid')
     model['xing']['mid'] = Wire(*l23, wire_rad)
-    #bob1.make_wire(*l34, wire_rad, name='-X', nr_seg=100)
     model['xing']['X-'] = Wire(*l34, wire_rad)
-
-    #main.make_port('mid', 0.5, VoltageSource(1.0))
     model['xing']['mid'].add_port(0.5, 'VS', VoltageSource(1.0))
     fs = FreqSteps('lin', 3, 100., 10.)
     rps = RadPatternSpec()
