@@ -534,7 +534,11 @@ class TaggedGroup:
 
     def _port_part(self, port_name):
         for __partid in self.parts:
-            if port_name == self.parts[__partid].port.name:
+            try:
+                part_port_name = self.parts[__partid].port.name
+            except AttributeError:
+                part_port_name = None
+            if port_name == part_port_name:
                 return __partid
         raise KeyError(f"Port '{port_name}' does not exist")
 
@@ -740,7 +744,7 @@ class StructureModel:
                         print_inp_imp = 1
                         I4 = int(
                             f"{print_max_rel_admittance_mat}{print_inp_imp}")
-                    voltage =  port.source.amplitude
+                    voltage =  port.source.value
                     if ex_type == 0:
                         F1, F2 = voltage.real, voltage.imag
                     d.append_card('EX', ex_type, I2, I3, I4,
