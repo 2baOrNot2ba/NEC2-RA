@@ -1,4 +1,6 @@
 from io import StringIO
+import numpy as np
+import matplotlib.pyplot as plt
 from nec2 import (Deck, Wire, StructureModel, VoltageSource, FreqSteps, 
                   ExecutionBlock, RadPatternSpec)
 
@@ -45,7 +47,6 @@ def test_Deck_exec_as_pynec():
 
 
 def test_StructureModel():
-    model = StructureModel()
     p1 = (+0.5, 0., 0.1)
     p2 = (+0.5, 0., 0.9)
     p3 = (-0.5, 0., 0.9)
@@ -54,6 +55,7 @@ def test_StructureModel():
     l23 = (p2, p3)
     l34 = (p3, p4)
     wire_rad = 0.001
+    model = StructureModel('Big_Xing')
     model['xing']['X+'] = Wire(*l12, wire_rad)
     model['xing']['mid'] = Wire(*l23, wire_rad)
     model['xing']['X-'] = Wire(*l34, wire_rad)
@@ -71,4 +73,44 @@ def test_StructureModel():
         for pnr, portname in enumerate(ex_ports):
             print(portname, inp_parms.get_impedance()[pnr])
 
-test_StructureModel()
+def test_array_2_lamhalf_dip_sbys():
+    """
+    Test of two lambda/2 dipole side-by-side array
+
+    See Balanis Antenna Theory 2016, Fig 8.21
+    """
+    lamhalf = 1.0
+    w_radii = 1e-5*2*lamhalf
+    dip_len = lamhalf
+    p1 = (0., 0., -dip_len/2)
+    p2 = (0., 0., +dip_len/2)
+    l12 = (p1, p2)
+    twodip = StructureModel('2dip_sbs')
+    twodip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    fs = FreqSteps('lin', 1, 3e8/(2*lamhalf)/1e6)  # MHz
+    print("Freq", fs.start, 'MHz')
+    # rps = None  # RadPatternSpec()
+    twodip.segmentalize(65, fs.max_freq())
+    ex_port = ('VS', VoltageSource(1.0))
+    dists = 2*lamhalf * np.linspace(0.0, 3., 50)[1:]
+    mutimp = []
+    for dist in dists:
+        arr_pos = [[0.,0.,0.], [dist, 0., 0.]]
+        twodip.arrayify(element=['dip'],
+                        array_positions=arr_pos)
+        eepdat = twodip.calc_eeps(ExecutionBlock(fs, ex_port))
+        impmat = eepdat.get_impedances()
+        mutimp.append(impmat[0,0,1])
+    mutimp = np.array(mutimp)
+    plt.plot(dists/(2*lamhalf), np.real(mutimp))
+    plt.plot(dists/(2*lamhalf), np.imag(mutimp))
+    plt.legend(['Resistive','Reactive'])
+    plt.xlabel('Separation [lambda]')
+    plt.ylabel('Mutual-impedance [Ohm]')
+    plt.title('2 side-by-side half-wave dipoles\n'
+              'simulated with NEC2 '
+              f'(wire radius={w_radii/(2*lamhalf)} lambda)')
+    plt.show()
+
+#test_StructureModel()
+test_array_2_lamhalf_dip_sbys()
