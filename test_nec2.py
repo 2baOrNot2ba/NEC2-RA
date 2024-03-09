@@ -1,17 +1,22 @@
-from antpat.io.nec2 import StructureModel, VoltageSource, FreqSteps
+from io import StringIO
+from nec2 import (Deck, Wire, StructureModel, VoltageSource, FreqSteps, 
+                  ExecutionBlock, RadPatternSpec)
 
-if False:
-    d=Deck()
+
+def test_Deck():
+    d = Deck()
     d.put_card('GW', 0, 7, 0., 0., -.25, 0., 0., .25, 1.0E-5)
     d.put_card('GE', 0)
     d.put_card('EX', 0, 0, 4, 0, 1.0)
     d.put_card('EN')
-    d2=Deck([('GW', 0, 7, 0.0, 0.0, -0.25, 0.0, 0.0, 0.25, 1e-05),
-            ('GE', 0),
-            ('EX', 0, 0, 4, 0, 1.0),
-            ('EN',)])
+    d2 = Deck([('GW', 0, 7, 0.0, 0.0, -0.25, 0.0, 0.0, 0.25, 1e-05),
+               ('GE', 0),
+               ('EX', 0, 0, 4, 0, 1.0),
+               ('EN',)])
     print(d==d2)
-if False:
+
+
+def test_Deck_load_necfile():
     test_necin = \
 """\
 CM TESTEX1
@@ -26,15 +31,20 @@ PQ  0    0    0    0
 NE  0    1    1   15      .001        0.        0.        0.        0.    .01786
 EN
 """
+    d = Deck()
     d.load_necfile(StringIO(test_necin), 'COLUMNS')
-    d=load('/home/tobia/Documents/Work_Proj/nec2/halfwavedip_col.nec', 'COLUMNS')
     print(d)
-if False:
+
+
+def test_Deck_exec_as_pynec():
+    d = Deck()
     cntxt = d.exec_as_pynec()
     for f in range(1):
         inp_parms = cntxt.get_input_parameters(f)
         print(inp_parms.get_impedance())
-if False:
+
+
+def test_StructureModel():
     model = StructureModel()
     p1 = (+0.5, 0., 0.1)
     p2 = (+0.5, 0., 0.9)
@@ -44,18 +54,28 @@ if False:
     l23 = (p2, p3)
     l34 = (p3, p4)
     wire_rad = 0.001
-    bob1 = model.newtag('bob1')
-    bob1.make_wire(*l12, wire_rad, name='+X', nr_seg=100)
-    main = model.newtag('main')
-    main.make_wire(*l23, wire_rad, name='mid')
-    bob1.make_wire(*l34, wire_rad, name='-X', nr_seg=100)
+    #bob1 = model.newtag('bob1')
+    #bob1.make_wire(*l12, wire_rad, name='+X', nr_seg=100)
+    model['xing']['X+'] = Wire(*l12, wire_rad)
+    #main = model.newtag('main')
+    #main.make_wire(*l23, wire_rad, name='mid')
+    model['xing']['mid'] = Wire(*l23, wire_rad)
+    #bob1.make_wire(*l34, wire_rad, name='-X', nr_seg=100)
+    model['xing']['X-'] = Wire(*l34, wire_rad)
 
-    main.make_port('mid', 0.5, VoltageSource(1.0))
-    model.set_freqstep(FreqSteps())
-    model.segmentize(10)
-    d=model.as_neccards()
-    print(d)
-    cntxt = d.exec_as_pynec()
-    for f in range(1):
+    #main.make_port('mid', 0.5, VoltageSource(1.0))
+    model['xing']['mid'].add_port(0.5, 'VS', VoltageSource(1.0))
+    fs = FreqSteps('lin', 3, 100., 10.)
+    rps = RadPatternSpec()
+    ex_ports = [('VS', VoltageSource(1.0))]
+    eb = ExecutionBlock(fs, ex_ports, rps)
+    model.segmentalize(15, fs.max_freq())
+    model.add_executionblock('exblk', eb)
+    d = model.as_neccards()
+    cntxt = next(d.exec_pynec())
+    for f in range(len(fs.aslist())):
         inp_parms = cntxt.get_input_parameters(f)
-        print(inp_parms.get_impedance()[0])
+        for pnr, portname in enumerate(ex_ports):
+            print(portname, inp_parms.get_impedance()[pnr])
+
+test_StructureModel()
