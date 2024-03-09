@@ -608,7 +608,8 @@ class StructureModel:
         self.excited_elements = []
         self.comments = []
         self.ground = None
-        self._last_tag_nr = 0
+        self._last_base_tag_nr = 0
+        self._last_elem_tag_nr = self._last_base_tag_nr
     
     def set_commentline(self, comment):
         self.comments.append(comment)
@@ -620,27 +621,31 @@ class StructureModel:
         """\
         Assign sequential tag nrs to base groups and set up element tags
         """
-        last_tag_nr = self._last_tag_nr
+        last_tag_nr = self._last_base_tag_nr
         # Set tags for non element groups
         nonelemgrps = set(self.groups)-set(self.element)
         inc = 1
         for last_tag_nr, gid in enumerate(nonelemgrps, start=last_tag_nr+inc):
             self.groups[gid]._tag_nr = last_tag_nr
-        self._last_tag_nr = last_tag_nr
+        self._last_base_tag_nr = last_tag_nr
 
     def _assign_tags_elem(self):
         """\
         Assign sequential tag nrs to array elements and set up element tags
-        """        
+        """
+        nonelemgrps = set(self.groups)-set(self.element)
+        if nonelemgrps is None:
+            # Remove base group tags by starting from 0
+            self._last_base_tag_nr = 0
         # Set tags for element group
-        last_tag_nr = self._last_tag_nr
+        last_tag_nr = self._last_base_tag_nr
         inc = 10**len(str(last_tag_nr))
         #inc = 1  # REMOVE this test 
         elem_tags_start = last_tag_nr+inc
         for last_tag_nr, gid in enumerate(self.element, start=last_tag_nr+inc):
             self.groups[gid]._tag_nr = last_tag_nr
         self.elements_tags[0] = list(range(elem_tags_start, last_tag_nr+1))
-        self._last_tag_nr = last_tag_nr
+        self._last_elem_tag_nr = last_tag_nr
         nr_elem_tags = len(self.elements_tags[0])
         for elem_nr in range(1, len(self.arr_delta_pos)):
             elem_tags_start += nr_elem_tags
@@ -876,16 +881,21 @@ class StructureModel:
                     radpat_out = nec_context.get_radiation_pattern(f)
                     # Coordinates theta,phi are the same for all frequecies,
                     # but easiest to just get it for each freq spec.
-                    thetas = radpat_out.get_theta_angles()
-                    phis = radpat_out.get_phi_angles()
-                    # Fields
-                    ef_vert_fr = radpat_out.get_e_theta()
-                    ef_vert_fr = ef_vert_fr.reshape((len(thetas), len(phis)))
-                    ef_hori_fr = radpat_out.get_e_phi()
-                    ef_hori_fr = ef_hori_fr.reshape((len(thetas), len(phis)))
-                    ef_hori.append(ef_hori_fr)
-                    ef_vert.append(ef_vert_fr)
-
+                    if radpat_out:
+                        thetas = radpat_out.get_theta_angles()
+                        phis = radpat_out.get_phi_angles()
+                        # Fields
+                        ef_vert_fr = radpat_out.get_e_theta()
+                        ef_vert_fr = ef_vert_fr.reshape(
+                                                (len(thetas), len(phis)))
+                        ef_hori_fr = radpat_out.get_e_phi()
+                        ef_hori_fr = ef_hori_fr.reshape(
+                                                (len(thetas), len(phis)))
+                        ef_hori.append(ef_hori_fr)
+                        ef_vert.append(ef_vert_fr)
+                    else:
+                        thetas = None
+                        phis = None
                     # Get structure currents
                     _sc_f = nec_context.get_structure_currents(f)
                     _currents = _sc_f.get_current()
