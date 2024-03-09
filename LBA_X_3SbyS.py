@@ -1,9 +1,9 @@
 import math
-import cmath
 import numpy as np
 from nec2 import (StructureModel, VoltageSource, FreqSteps, Wire,
                   ExecutionBlock, RadPatternSpec)
 
+np.set_printoptions(precision=4, linewidth=80)
 PRINT_inpparm = False
 PRINT_radpat = True
 
@@ -33,7 +33,7 @@ lba_model['puck']['LNA_connect'].add_port(0.5, 'LNA_x', VoltageSource(1.0))
 arr_pos =[[0.,0.,0.], [0., 2., 0.],[0.,4.,0.]]
 lba_model.arrayify(element=['ant_X','puck'],
                    array_positions=arr_pos)
-nr_freqs = 1
+nr_freqs = 2
 frq_cntr = 50.0
 _frq_cntr_step = FreqSteps('lin', nr_freqs, frq_cntr, 2.0)
 lba_model.segmentalize(201, frq_cntr)
@@ -42,11 +42,18 @@ nr_ants = len(arr_pos)
 _epl = RadPatternSpec(nth=3, dth=1.0, nph=0, dph=3., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
 
-eeps = lba_model.calc_eeps(ExecutionBlock(_frq_cntr_step, _port_ex, _epl),
+eepdat = lba_model.calc_eeps(ExecutionBlock(_frq_cntr_step, _port_ex, _epl),
                            save_necfile=True)
+
+Z =  eepdat.get_impedances()
+if True:
+    #for ln in Y:
+    #    print(*np.around(ln,5))
+    print(Z)
+
 refantnr = 0
 for antnr in range(nr_ants):
-    eep =  eeps[antnr]
+    eep =  eepdat.eeps[antnr]
     print("Antenna nr:", antnr)
     for fidx, frq in enumerate(eep.freqs):
         indent = '  '
@@ -59,15 +66,16 @@ for antnr in range(nr_ants):
         if PRINT_radpat:
             #print('E_theta_amp', np.abs(eep.ef_tht[fidx]))
             #print('E_theta_phs', np.rad2deg(np.angle(eep.ef_tht[fidx])))
-            print('Theta, Phi:')
+            print(2*indent+'Theta, Phi:')
             thetagrd , phigrd = np.meshgrid(eep.thetas, eep.phis)
             #print(thetagrd, phigrd)
             print(2*indent+'E_phi_amp')
             print(3*indent, str(np.abs(eep.ef_phi[fidx])
                                 ).replace('\n', '\n'+3*indent))
             print(2*indent+'E_phi_phs')
-            _ref_phases = np.angle(eeps[refantnr].ef_phi[fidx])
+            _ref_phases = np.angle(eepdat.eeps[refantnr].ef_phi[fidx])
             print(3*indent, str(np.rad2deg(np.angle(
                 eep.ef_phi[fidx])-_ref_phases)
                                 ).replace('\n', '\n'+3*indent))
+
     print()

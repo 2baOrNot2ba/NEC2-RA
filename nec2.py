@@ -1,6 +1,6 @@
 import math
 import cmath
-from dataclasses import dataclass, astuple
+from dataclasses import dataclass, astuple, field
 import typing
 import pathlib
 import numpy as np
@@ -308,7 +308,7 @@ class Deck:
 
 @dataclass
 class VoltageSource:
-    amplitude: complex = 1+0j
+    value: complex = 1+0j
     type: str = 'applied-E-field'  # or 'current-slope-discontinuity'
 
     def nec_type(self):
@@ -452,6 +452,43 @@ class NECout:
     inp_V: complex = None
     inp_I: complex = None
     inp_Z: complex = None
+
+
+class StructureCurrents:
+    def __init__(self, freqs, nr_ants):
+        self.freqs = freqs
+        self.impedance = np.zeros((nr_ants, nr_ants))
+        self.currents = []
+        self._segtags = []
+        self._segnums = []
+
+    def set_currents(self, currents):
+        self.currents = currents
+
+    def set_segtags(self, segtags):
+        self._segtags = segtags
+
+    def set_segnums(self, segnums):
+        self._segnums = segnums
+
+    def _current_index(self, tag, seg):
+        # Get the absolute segment nums with excited tag
+        abstagsegs = self._segnums[
+            np.nonzero(self._segtags == tag)[0]]
+        absseg = abstagsegs[0]+seg-1
+        return absseg-1
+    
+    def get_current(self, tag, seg):
+        return self.currents[self._current_index(tag, seg)]
+
+
+class EEPdata:
+    def __init__(self, nrants, nrfreqs):
+        self.eeps = []  # One EEP for each excitation ie element
+        self.admittances = np.zeros((nrfreqs, nrants, nrants), complex)
+    
+    def get_impedances(self):
+        return np.linalg.inv(self.admittances)
 
 
 class TaggedGroup:
@@ -727,7 +764,7 @@ class StructureModel:
                     print_inp_imp = 1
                     I4 = int(
                         f"{print_max_rel_admittance_mat}{print_inp_imp}")
-                voltage =  port.source.amplitude
+                voltage =  port.source.value
                 if ex_type == 0:
                     F1, F2 = voltage.real, voltage.imag
                 d.append_card('EX', ex_type, I2, I3, I4,
@@ -807,10 +844,12 @@ class StructureModel:
         """Calculate embedded element patterns (EEPs) for array"""
 
         _frq_cntr_step = eep_eb.freqsteps
+        freqs = _frq_cntr_step.aslist()
         _exciteport_name, _vltsrc = eep_eb.exciteports
         _rad_pat = eep_eb.radpat
         nr_ants = len(self.arr_delta_pos)
-        results = []
+        results = EEPdata(nr_ants, len(freqs))
+        sc = StructureCurrents(freqs, nr_ants)
         for antnr in range(nr_ants):
             _prt_exc = ((antnr, _exciteport_name), _vltsrc)
             _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat)
@@ -821,29 +860,55 @@ class StructureModel:
             for nec_context in _deck.exec_pynec():
                 ef_vert = []
                 ef_hori = []
-                freqs = _frq_cntr_step.aslist()
-                nr_freqs = len(freqs)
-                for f in range(nr_freqs):
+                for f in range(len(freqs)):
+                    # Input (excitation) parameters
                     inp_parms = nec_context.get_input_parameters(f)
-                    #frequency = inp_parms.get_frequency()
+                    # ##frequency = inp_parms.get_frequency()
                     Z = inp_parms.get_impedance()
                     I = inp_parms.get_current()
                     V = inp_parms.get_voltage()
+
+                    # Radiation pattern
                     radpat_out = nec_context.get_radiation_pattern(f)
                     # Coordinates theta,phi are the same for all frequecies,
                     # but easiest to just get it for each freq spec.
                     thetas = radpat_out.get_theta_angles()
                     phis = radpat_out.get_phi_angles()
-
-                    ef_vert_fr = np.array(radpat_out.get_e_theta())
+                    # Fields
+                    ef_vert_fr = radpat_out.get_e_theta()
                     ef_vert_fr = ef_vert_fr.reshape((len(thetas), len(phis)))
-                    ef_hori_fr = np.array(radpat_out.get_e_phi())
+                    ef_hori_fr = radpat_out.get_e_phi()
                     ef_hori_fr = ef_hori_fr.reshape((len(thetas), len(phis)))
                     ef_hori.append(ef_hori_fr)
                     ef_vert.append(ef_vert_fr)
-                results.append(NECout(freqs, thetas, phis,
-                                      np.array(ef_vert), np.array(ef_hori),
-                                      inp_V=V, inp_I=I, inp_Z=Z))
+
+                    # Get structure currents
+                    _sc_f = nec_context.get_structure_currents(f)
+                    _currents = _sc_f.get_current()
+                    _sc_segtags = _sc_f.get_current_segment_tag()
+                    _sc_segnums = _sc_f.get_current_segment_number()
+                    sc.currents = _currents
+                    sc.set_segtags(_sc_segtags)
+                    sc.set_segnums(_sc_segnums)
+
+                    # Find mutual-impedances
+                    admittances_T = []
+                    gid = self._port_group(_exciteport_name)
+                    port = self.groups[gid].get_ports(_exciteport_name)
+                    elemgrpidx = self.element.index(gid)
+                    for _antnr_j in range(nr_ants):
+                        ex_tag = self.elements_tags[_antnr_j][elemgrpidx]
+                        ex_seg = None
+                        if port.source:
+                            ex_seg = port.ex_seg
+                        cur_port = sc.get_current(ex_tag, ex_seg)
+                        admittances_T.append(cur_port / port.source.value)
+                    #print(1/admittances_T[antnr], Z)
+                    results.admittances[f,:,antnr] = np.array(admittances_T)
+                results.eeps.append(NECout(freqs, thetas, phis,
+                                    np.array(ef_vert), np.array(ef_hori),
+                                    inp_V=V, inp_I=I, inp_Z=Z))
+                
         return results
 
     def __getitem__(self, group_id):
@@ -879,3 +944,4 @@ class StructureModel:
             for p in _gs.parts:
                 out.append(2*indent+"part: "+str(_gs.parts[p]))
         return '\n'.join(out)
+
