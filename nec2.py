@@ -727,14 +727,28 @@ class StructureModel:
             self.executionblocks = {}
         self.executionblocks[name] = executionblock
 
-    def arrayify(self, element, array_positions):
-        self.element = element
-        self.arr_delta_pos = []
+    def _arr_pos2arr_delta(self, array_positions):
+        """Absolute array positions to array delta positions"""
+        arr_delta_pos = []
         pos_from = [0., 0., 0.]
         for pos_to in array_positions:
             delta_pos = [pos_to[idx]-pos_from[idx] for idx in range(3)] 
-            self.arr_delta_pos.append(delta_pos)
+            arr_delta_pos.append(delta_pos)
             pos_from = pos_to
+        return arr_delta_pos
+    
+    def _arr_delta2arr_pos(self, arr_delta_pos):
+        """Array delta positions to absolute array positions"""
+        array_positions = []
+        resultant = [0., 0., 0.]
+        for deltvec in arr_delta_pos:
+            resultant = [resultant[idx]+deltvec[idx] for idx in range(3)]
+            array_positions.append(resultant)
+        return array_positions
+
+    def arrayify(self, element, array_positions):
+        self.element = element
+        self.arr_delta_pos = self._arr_pos2arr_delta(array_positions)
         self._assign_tags_elem()
 
     def as_neccards(self):
@@ -946,26 +960,28 @@ class StructureModel:
                                     inp_V=V, inp_I=I, inp_Z=Z))
                 
         return results
-    
-
 
     def calc_steering_vector(self, eep_eb):
         """Calculate steering vector for array
 
-        returns:
-        steering_vectors : (nfr, nth, nph, nrants) array
-
+        Returns
+        -------
+        steering_vectors : (nant, nfr, nth, nph) shaped array
+            Steering vectors, i.e. the vector [exp(j*k_i*r_{la})].T
+            for wavevector k_i (given by direction cosines times wavenumber)
+            and the position vector r_l for all antennas a.
         """
         khat = eep_eb.radpat.as_khat()
-        pos = np.array(self.arr_delta_pos)
+        pos = self._arr_delta2arr_pos(self.arr_delta_pos)
+        pos = np.array(pos)  # pos.shape = (nant, xyz)
+        phases_hat = np.matmul(khat, pos.T)  # khat[nth,nph,xyz] pos[nant,xyz]
+        print(khat[-1,0,:],pos[:,1])  # phase_hat.shape = (nth, nph, nant)
         _freqs = eep_eb.freqsteps.aslist()
-        k = 2*np.pi/3e2*np.array(_freqs)  # k=2pi*freq/c
-        phases_hat = np.matmul(khat, pos.T)
+        k = 2*np.pi/3e2*np.array(_freqs)  # k=2pi*freq/c, shape = (nfrq,)
         phases = k[:, np.newaxis, np.newaxis, np.newaxis] * phases_hat
-        steering_vectors = np.exp(+1j*phases)
+        steering_vectors = np.exp(+1j*phases)  # sv[nfrq,nth,nph,nant]
         steering_vectors = np.moveaxis(steering_vectors, -1, 0)
         return steering_vectors
-
 
     def __getitem__(self, group_id):
         if type(group_id) == str:
