@@ -416,6 +416,28 @@ class RadPatternSpec:
         self.dth = int(90/nth)
         self.dph = int(360/nph)
         return self
+    
+    def as_thetaphis(self):
+        nth = self.nth if self.nth > 0 else 1
+        nph = self.nph if self.nph > 0 else 1
+        thetas = [self.thets+thtnr*self.dth for thtnr in range(nth)]
+        phis = [self.phis+phinr*self.dph for phinr in range(nph)]
+        return thetas, phis
+    
+    def as_thetaphimeshs(self):
+        thetas, phis = self.as_thetaphis()
+        thetamesh, phimesh = np.meshgrid(thetas, phis, indexing='ij')
+        return thetamesh, phimesh
+    
+    def as_khat(self):
+        thetamsh, phimsh = self.as_thetaphimeshs()
+        thetamsh = np.deg2rad(thetamsh)
+        phimsh = np.deg2rad(phimsh)
+        khat = np.array([np.sin(thetamsh)*np.cos(phimsh),
+                         np.sin(thetamsh)*np.sin(phimsh),
+                         np.cos(thetamsh)])
+        khat = np.moveaxis(khat, 0,-1)
+        return khat
 
 @dataclass
 class Ground:
@@ -887,10 +909,10 @@ class StructureModel:
                         # Fields
                         ef_vert_fr = radpat_out.get_e_theta()
                         ef_vert_fr = ef_vert_fr.reshape(
-                                                (len(thetas), len(phis)))
+                                                (len(phis), len(thetas))).T
                         ef_hori_fr = radpat_out.get_e_phi()
                         ef_hori_fr = ef_hori_fr.reshape(
-                                                (len(thetas), len(phis)))
+                                                (len(phis), len(thetas))).T
                         ef_hori.append(ef_hori_fr)
                         ef_vert.append(ef_vert_fr)
                     else:
@@ -924,6 +946,26 @@ class StructureModel:
                                     inp_V=V, inp_I=I, inp_Z=Z))
                 
         return results
+    
+
+
+    def calc_steering_vector(self, eep_eb):
+        """Calculate steering vector for array
+
+        returns:
+        steering_vectors : (nfr, nth, nph, nrants) array
+
+        """
+        khat = eep_eb.radpat.as_khat()
+        pos = np.array(self.arr_delta_pos)
+        _freqs = eep_eb.freqsteps.aslist()
+        k = 2*np.pi/3e2*np.array(_freqs)  # k=2pi*freq/c
+        phases_hat = np.matmul(khat, pos.T)
+        phases = k[:, np.newaxis, np.newaxis, np.newaxis] * phases_hat
+        steering_vectors = np.exp(+1j*phases)
+        steering_vectors = np.moveaxis(steering_vectors, -1, 0)
+        return steering_vectors
+
 
     def __getitem__(self, group_id):
         if type(group_id) == str:
