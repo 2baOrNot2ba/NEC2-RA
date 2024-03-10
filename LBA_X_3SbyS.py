@@ -41,15 +41,23 @@ _port_ex = ('LNA_x', VoltageSource(1.0))
 nr_ants = len(arr_pos)
 _epl = RadPatternSpec(nth=3, dth=1.0, nph=0, dph=3., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
-
-eepdat = lba_model.calc_eeps(ExecutionBlock(_frq_cntr_step, _port_ex, _epl),
-                           save_necfile=True)
+eb_arr = ExecutionBlock(_frq_cntr_step, _port_ex, _epl)
+eepdat = lba_model.calc_eeps(eb_arr, save_necfile=True)
 
 Z =  eepdat.get_impedances()
 if True:
     #for ln in Y:
     #    print(*np.around(ln,5))
     print(Z)
+
+# Get steering vectors
+sv = lba_model.calc_steering_vector(eb_arr)
+thetamsh, phimsh = eb_arr.radpat.as_thetaphimeshs()
+for th_idx in range(thetamsh.shape[0]):
+    for ph_idx in range(phimsh.shape[1]):
+        print(thetamsh[th_idx, ph_idx], phimsh[th_idx, ph_idx], end='')
+        #print(sv_ants[:,th_idx, ph_idx])
+        print(sv[:,:, th_idx, ph_idx])
 
 refantnr = 0
 for antnr in range(nr_ants):
@@ -67,7 +75,8 @@ for antnr in range(nr_ants):
             #print('E_theta_amp', np.abs(eep.ef_tht[fidx]))
             #print('E_theta_phs', np.rad2deg(np.angle(eep.ef_tht[fidx])))
             print(2*indent+'Theta, Phi:')
-            thetagrd , phigrd = np.meshgrid(eep.thetas, eep.phis)
+            #thetagrd , phigrd = np.meshgrid(eep.thetas, eep.phis,
+            #                                indexing='ij')
             #print(thetagrd, phigrd)
             print(2*indent+'E_phi_amp')
             print(3*indent, str(np.abs(eep.ef_phi[fidx])
@@ -75,7 +84,11 @@ for antnr in range(nr_ants):
             print(2*indent+'E_phi_phs')
             _ref_phases = np.angle(eepdat.eeps[refantnr].ef_phi[fidx])
             print(3*indent, str(np.rad2deg(np.angle(
-                eep.ef_phi[fidx])-_ref_phases)
+                eep.ef_phi[fidx])-1*_ref_phases)
                                 ).replace('\n', '\n'+3*indent))
+            print(2*indent+'steering_phs')
+            print(3*indent, str(np.rad2deg(np.angle(sv[antnr, fidx])-0*_ref_phases
+                                )).replace('\n', '\n'+3*indent))
+
 
     print()
