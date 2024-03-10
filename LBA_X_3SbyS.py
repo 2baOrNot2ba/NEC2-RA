@@ -30,34 +30,27 @@ lba_model['puck']['LNA_connect'] = Wire(*l23, wire_radius)
 lba_model['ant_X']['+X'] = Wire(*l34, wire_radius)
 lba_model['puck']['LNA_connect'].add_port(0.5, 'LNA_x', VoltageSource(1.0))
 
-arr_pos =[[0.,0.,0.], [0., 2., 0.],[0.,4.,0.]]
+arr_pos =[[0., 0., 0.], [0., 2., 0.],[0., 4., 0.]]
 lba_model.arrayify(element=['ant_X','puck'],
                    array_positions=arr_pos)
-nr_freqs = 2
+nr_freqs = 1
 frq_cntr = 50.0
 _frq_cntr_step = FreqSteps('lin', nr_freqs, frq_cntr, 2.0)
 lba_model.segmentalize(201, frq_cntr)
 _port_ex = ('LNA_x', VoltageSource(1.0))
 nr_ants = len(arr_pos)
-_epl = RadPatternSpec(nth=3, dth=1.0, nph=0, dph=3., phis=90.)
+_epl = RadPatternSpec(nth=3, dth=20.0, nph=0, dph=0., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
 eb_arr = ExecutionBlock(_frq_cntr_step, _port_ex, _epl)
 eepdat = lba_model.calc_eeps(eb_arr, save_necfile=True)
 
+print("Impedances")
 Z =  eepdat.get_impedances()
-if True:
-    #for ln in Y:
-    #    print(*np.around(ln,5))
-    print(Z)
+print(Z)
+print()
 
 # Get steering vectors
 sv = lba_model.calc_steering_vector(eb_arr)
-thetamsh, phimsh = eb_arr.radpat.as_thetaphimeshs()
-for th_idx in range(thetamsh.shape[0]):
-    for ph_idx in range(phimsh.shape[1]):
-        print(thetamsh[th_idx, ph_idx], phimsh[th_idx, ph_idx], end='')
-        #print(sv_ants[:,th_idx, ph_idx])
-        print(sv[:,:, th_idx, ph_idx])
 
 refantnr = 0
 for antnr in range(nr_ants):
@@ -82,13 +75,12 @@ for antnr in range(nr_ants):
             print(3*indent, str(np.abs(eep.ef_phi[fidx])
                                 ).replace('\n', '\n'+3*indent))
             print(2*indent+'E_phi_phs')
-            _ref_phases = np.angle(eepdat.eeps[refantnr].ef_phi[fidx])
-            print(3*indent, str(np.rad2deg(np.angle(
-                eep.ef_phi[fidx])-1*_ref_phases)
+            _ref_amphs = eepdat.eeps[refantnr].ef_phi[fidx]
+            print(3*indent, str(np.angle(
+                eep.ef_phi[fidx]*np.conj(_ref_amphs), deg=True)
                                 ).replace('\n', '\n'+3*indent))
             print(2*indent+'steering_phs')
-            print(3*indent, str(np.rad2deg(np.angle(sv[antnr, fidx])-0*_ref_phases
-                                )).replace('\n', '\n'+3*indent))
-
+            print(3*indent, str(np.angle(sv[antnr, fidx], deg=True)
+                                ).replace('\n', '\n'+3*indent))
 
     print()
