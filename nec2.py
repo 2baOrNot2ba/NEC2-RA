@@ -624,14 +624,9 @@ class StructureModel:
         self.name = name
         self.groups = {}
         self.executionblocks = {}
-        self.element = []  # List of group names that make up element
-        self.arr_delta_pos = [[]]
-        self.elements_tags = [[]]  # Map element nr to its tags 
-        self.excited_elements = []
         self.comments = []
         self.ground = None
         self._last_base_tag_nr = 0
-        self._last_elem_tag_nr = self._last_base_tag_nr
     
     def set_commentline(self, comment):
         self.comments.append(comment)
@@ -650,29 +645,6 @@ class StructureModel:
         for last_tag_nr, gid in enumerate(nonelemgrps, start=last_tag_nr+inc):
             self.groups[gid]._tag_nr = last_tag_nr
         self._last_base_tag_nr = last_tag_nr
-
-    def _assign_tags_elem(self):
-        """\
-        Assign sequential tag nrs to array elements and set up element tags
-        """
-        nonelemgrps = set(self.groups)-set(self.element)
-        if nonelemgrps is None:
-            # Remove base group tags by starting from 0
-            self._last_base_tag_nr = 0
-        # Set tags for element group
-        last_tag_nr = self._last_base_tag_nr
-        inc = 10**len(str(last_tag_nr))
-        #inc = 1  # REMOVE this test 
-        elem_tags_start = last_tag_nr+inc
-        for last_tag_nr, gid in enumerate(self.element, start=last_tag_nr+inc):
-            self.groups[gid]._tag_nr = last_tag_nr
-        self.elements_tags[0] = list(range(elem_tags_start, last_tag_nr+1))
-        self._last_elem_tag_nr = last_tag_nr
-        nr_elem_tags = len(self.elements_tags[0])
-        for elem_nr in range(1, len(self.arr_delta_pos)):
-            elem_tags_start += nr_elem_tags
-            _ = range(elem_tags_start, elem_tags_start + nr_elem_tags)
-            self.elements_tags.append(list(_))
 
     def nrsegs_hints(self, min_seg_perlambda, max_frequency):
         nrsegs = {}
@@ -721,90 +693,39 @@ class StructureModel:
         self.groups[base_gid].get_ports(port_name).source = voltage_src
         if elem_nr is not None:
             self.excited_elements.append(port_id)
-    
+
     def add_executionblock(self, name, executionblock , reset=False):
         if reset:
             self.executionblocks = {}
         self.executionblocks[name] = executionblock
-
-    def _arr_pos2arr_delta(self, array_positions):
-        """Absolute array positions to array delta positions"""
-        arr_delta_pos = []
-        pos_from = [0., 0., 0.]
-        for pos_to in array_positions:
-            delta_pos = [pos_to[idx]-pos_from[idx] for idx in range(3)] 
-            arr_delta_pos.append(delta_pos)
-            pos_from = pos_to
-        return arr_delta_pos
     
-    def _arr_delta2arr_pos(self, arr_delta_pos):
-        """Array delta positions to absolute array positions"""
-        array_positions = []
-        resultant = [0., 0., 0.]
-        for deltvec in arr_delta_pos:
-            resultant = [resultant[idx]+deltvec[idx] for idx in range(3)]
-            array_positions.append(resultant)
-        return array_positions
-
-    def arrayify(self, element, array_positions):
-        self.element = element
-        self.arr_delta_pos = self._arr_pos2arr_delta(array_positions)
-        self._assign_tags_elem()
-
-    def as_neccards(self):
-
-        d = Deck()
-
-        def create_geom_for_groups(subgroup_ids):
-            nonlocal d
-            subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
-            for gid in subgroups:
-                for pid in subgroups[gid]:
-                    tag_nr = subgroups[gid]._tag_nr
-                    a_part = subgroups[gid].parts[pid]
-                    nr_seg = a_part.nr_seg
-                    if type(a_part) == Wire:
-                        d.append_card('GW', tag_nr, nr_seg,
-                                *a_part.point_src, *a_part.point_dst,
-                                a_part.thickness)
-        
-        def create_excite_for_groups(subgroup_ids):
-            nonlocal d
-            subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
-            for gid in subgroups:
+    def create_geom_for_groups(self, d, subgroup_ids):
+        subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
+        for gid in subgroups:
+            for pid in subgroups[gid]:
                 tag_nr = subgroups[gid]._tag_nr
-                subgroups[gid]._assign_port_segs()
-                for portid in subgroups[gid].get_ports():
-                    port = subgroups[gid].get_ports(portid)
-                    if not port.source: continue
-                    ex_seg = port.ex_seg
-                    ex_type = port.source.nec_type()
-                    if ex_type == 0:
-                        I2, I3 = tag_nr, ex_seg
-                        print_max_rel_admittance_mat = 0
-                        print_inp_imp = 1
-                        I4 = int(
-                            f"{print_max_rel_admittance_mat}{print_inp_imp}")
-                    voltage =  port.source.value
-                    if ex_type == 0:
-                        F1, F2 = voltage.real, voltage.imag
-                    d.append_card('EX', ex_type, I2, I3, I4,
-                                  F1, F2, 0., 0., 0., 0.)
-        
-        def create_excite_for_elements(elem_ex_ports):
-            nonlocal d
-            for egname in self.element:
-                self.groups[egname]._assign_port_segs()
-            for _portid, __vs in elem_ex_ports:
-                eid, pnm = _portid
-                gid = self._port_group(pnm)
-                element_tag = self.elements_tags[eid][self.element.index(gid)]
-                port = self.groups[gid].get_ports(pnm)
+                a_part = subgroups[gid].parts[pid]
+                nr_seg = a_part.nr_seg
+                if type(a_part) == Wire:
+                    d.append_card('GW', tag_nr, nr_seg,
+                            *a_part.point_src, *a_part.point_dst,
+                            a_part.thickness)
+
+    def create_geom_for_exclusive_groups(self, d, subgroup_ids):
+        pass
+
+    def create_excite_for_groups(self, d, subgroup_ids):
+        subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
+        for gid in subgroups:
+            tag_nr = subgroups[gid]._tag_nr
+            subgroups[gid]._assign_port_segs()
+            for portid in subgroups[gid].get_ports():
+                port = subgroups[gid].get_ports(portid)
                 if not port.source: continue
                 ex_seg = port.ex_seg
                 ex_type = port.source.nec_type()
                 if ex_type == 0:
-                    I2, I3 = element_tag, ex_seg
+                    I2, I3 = tag_nr, ex_seg
                     print_max_rel_admittance_mat = 0
                     print_inp_imp = 1
                     I4 = int(
@@ -814,36 +735,29 @@ class StructureModel:
                     F1, F2 = voltage.real, voltage.imag
                 d.append_card('EX', ex_type, I2, I3, I4,
                                 F1, F2, 0., 0., 0., 0.)
-        
-        def _create_array():
-            nonlocal d
-            # Move 1st (base) element into pos0 (no tag increment)
-            elem_tags_start = self.elements_tags[0][0]
-            pos0 = self.arr_delta_pos[0]
-            d.append_card('GM', 0, 0, 0., 0., 0.,
-                          pos0[0], pos0[1], pos0[2], elem_tags_start)
-            # Copy last element and move by delta_pos 
-            #  (increment by nr of tags in base element after each move)
-            nr_elem_tags = len(self.elements_tags[0])
-            for dpos in self.arr_delta_pos[1:]:
-                d.append_card('GM', nr_elem_tags, 1, 0., 0., 0.,
-                              dpos[0], dpos[1], dpos[2], elem_tags_start)
-                elem_tags_start += nr_elem_tags
 
+    def create_excite_for_exclusive_groups(self, d, _exciteports):
+        pass
+
+    def as_neccards(self, exclude_groups=None):
+        """\
+        Return a Deck() object that corresponds to this StructureModel() object
+        """
+        d = Deck()
+        
         # Comments
         for comment in self.comments:
             d.append_card('CM', ' '+comment)
         d.append_card('CE', '')
-        nonelemgrp = set(self.groups)-set(self.element)
+        exclude_groups = {} if exclude_groups is None else exclude_groups
+        nonelemgrp = set(self.groups)-set(exclude_groups)
 
         # Structure Geometry for non element groups
-        create_geom_for_groups(nonelemgrp)
+        self.create_geom_for_groups(d, nonelemgrp)
         # Structure Geometry for element groups
         # # Create initial group to move
-        create_geom_for_groups(self.element)
-        if self.element:
-            # Make array of element
-            _create_array()
+        self.create_geom_for_exclusive_groups(d, exclude_groups)
+
         # End Geometry
         d.append_card('GE', 0)
 
@@ -860,30 +774,165 @@ class StructureModel:
                 d.append_card('FR', I1, I2, F1, F2)
 
             # Excitations
-            _nonelem_ex_ports = []
-            _elem_ex_ports = []
-            self.reset_port_srcs()
-            for ep in _exciteports:
-                self.excite_port(*ep)
-                if type(ep[0]) == str:
-                    _nonelem_ex_ports.append(ep)
-                elif type(ep[0]) == tuple:
-                    _elem_ex_ports.append(ep)
-
             # ... non element group
-            create_excite_for_groups(nonelemgrp)
+            self.create_excite_for_groups(d, nonelemgrp)
             # ... element group
-            create_excite_for_elements(_elem_ex_ports)
+            self.create_excite_for_exclusive_groups(d, _exciteports) ###
 
             # Cards that trigger execution of NEC2 engine 
             if _radpat:
                 d.append_card('RP', *astuple(_radpat))
             else:
                 d.append_card('XQ', 0)
-        
+
         # END
         d.append_card('EN', 0)
         return d
+
+    def __getitem__(self, group_id):
+        if type(group_id) == str:
+            if group_id not in self.groups:
+                # New group
+                if not group_id:
+                    group_id = TaggedGroup._uniq_name('_group_', self.groups)
+                tg = TaggedGroup()
+                tg._group_id = group_id
+                self.groups[group_id] = tg
+            else:
+                tg = self.groups[group_id]
+        elif type(group_id) == tuple:
+            tg = self.groups[group_id[1]]
+        return tg
+    
+    def __setitem__(self, group_id, tag_group):
+        tag_group._group_id = group_id
+        self.groups[group_id] = tag_group
+
+    def __iter__(self):
+        for gid in self.groups:
+            for pid in self.groups[gid].parts:
+                yield gid, pid
+
+    def __str__(self):
+        indent = '    '
+        out = ["Model: "+self.name]
+        for g in self.groups:
+            out.append(indent+'group: '+ str(g))
+            _gs = self.groups[g]
+            for p in _gs.parts:
+                out.append(2*indent+"part: "+str(_gs.parts[p]))
+        return '\n'.join(out)
+
+
+class ArrayModel(StructureModel):
+
+    def __init__(self, name='Model_'):
+        super().__init__(name)
+        self.element = []  # List of group names that make up element
+        self.arr_delta_pos = [[]]
+        self.elements_tags = [[]]  # Map element nr to its tags 
+        self.excited_elements = []
+        self._last_elem_tag_nr = self._last_base_tag_nr
+
+    def _assign_tags_elem(self):
+        """\
+        Assign sequential tag nrs to array elements and set up element tags
+        """
+        nonelemgrps = set(self.groups)-set(self.element)
+        if nonelemgrps is None:
+            # Remove base group tags by starting from 0
+            self._last_base_tag_nr = 0
+        # Set tags for element group
+        last_tag_nr = self._last_base_tag_nr
+        inc = 10**len(str(last_tag_nr))
+        #inc = 1  # REMOVE this test 
+        elem_tags_start = last_tag_nr+inc
+        for last_tag_nr, gid in enumerate(self.element, start=last_tag_nr+inc):
+            self.groups[gid]._tag_nr = last_tag_nr
+        self.elements_tags[0] = list(range(elem_tags_start, last_tag_nr+1))
+        self._last_elem_tag_nr = last_tag_nr
+        nr_elem_tags = len(self.elements_tags[0])
+        for elem_nr in range(1, len(self.arr_delta_pos)):
+            elem_tags_start += nr_elem_tags
+            _ = range(elem_tags_start, elem_tags_start + nr_elem_tags)
+            self.elements_tags.append(list(_))
+
+    def arr_pos2arr_delta(self, array_positions):
+        """Absolute array positions to array delta positions"""
+        arr_delta_pos = []
+        pos_from = [0., 0., 0.]
+        for pos_to in array_positions:
+            delta_pos = [pos_to[idx]-pos_from[idx] for idx in range(3)] 
+            arr_delta_pos.append(delta_pos)
+            pos_from = pos_to
+        return arr_delta_pos
+    
+    def arr_delta2arr_pos(self, arr_delta_pos):
+        """Array delta positions to absolute array positions"""
+        array_positions = []
+        resultant = [0., 0., 0.]
+        for deltvec in arr_delta_pos:
+            resultant = [resultant[idx]+deltvec[idx] for idx in range(3)]
+            array_positions.append(resultant)
+        return array_positions
+
+    def arrayify(self, element, array_positions):
+        self.element = element
+        self.arr_delta_pos = self.arr_pos2arr_delta(array_positions)
+        self._assign_tags_elem()
+    
+    def create_array(self, d):
+        # Move 1st (base) element into pos0 (no tag increment)
+        elem_tags_start = self.elements_tags[0][0]
+        pos0 = self.arr_delta_pos[0]
+        d.append_card('GM', 0, 0, 0., 0., 0.,
+                        pos0[0], pos0[1], pos0[2], elem_tags_start)
+        # Copy last element and move by delta_pos 
+        #  (increment by nr of tags in base element after each move)
+        nr_elem_tags = len(self.elements_tags[0])
+        for dpos in self.arr_delta_pos[1:]:
+            d.append_card('GM', nr_elem_tags, 1, 0., 0., 0.,
+                            dpos[0], dpos[1], dpos[2], elem_tags_start)
+            elem_tags_start += nr_elem_tags
+
+    def create_geom_for_exclusive_groups(self, d, subgroup_ids):
+        super().create_geom_for_groups(d, subgroup_ids)
+        self.create_array(d)
+
+    def create_excite_for_exclusive_groups(self, d, _exciteports):
+        _nonelem_ex_ports = []
+        _elem_ex_ports = []
+        self.reset_port_srcs()
+        for ep in _exciteports:
+            self.excite_port(*ep)
+            if type(ep[0]) == str:
+                _nonelem_ex_ports.append(ep)
+            elif type(ep[0]) == tuple:
+                _elem_ex_ports.append(ep)
+        for egname in self.element:
+            self.groups[egname]._assign_port_segs()
+        for _portid, __vs in _elem_ex_ports:
+            eid, pnm = _portid
+            gid = self._port_group(pnm)
+            element_tag = self.elements_tags[eid][self.element.index(gid)]
+            port = self.groups[gid].get_ports(pnm)
+            if not port.source: continue
+            ex_seg = port.ex_seg
+            ex_type = port.source.nec_type()
+            if ex_type == 0:
+                I2, I3 = element_tag, ex_seg
+                print_max_rel_admittance_mat = 0
+                print_inp_imp = 1
+                I4 = int(
+                    f"{print_max_rel_admittance_mat}{print_inp_imp}")
+            voltage =  port.source.value
+            if ex_type == 0:
+                F1, F2 = voltage.real, voltage.imag
+            d.append_card('EX', ex_type, I2, I3, I4,
+                            F1, F2, 0., 0., 0., 0.)
+
+    def as_neccards(self):
+        return super().as_neccards(exclude_groups=self.element)
     
     def calc_eeps(self, eep_eb, save_necfile=False):
         """Calculate embedded element patterns (EEPs) for array"""
@@ -972,7 +1021,7 @@ class StructureModel:
             and the position vector r_l for all antennas a.
         """
         khat = eep_eb.radpat.as_khat()
-        pos = self._arr_delta2arr_pos(self.arr_delta_pos)
+        pos = self.arr_delta2arr_pos(self.arr_delta_pos)
         pos = np.array(pos)  # pos.shape = (nant, xyz)
         phases_hat = np.matmul(khat, pos.T)  # khat[nth,nph,xyz] pos[nant,xyz]
         print(khat[-1,0,:],pos[:,1])  # phase_hat.shape = (nth, nph, nant)
@@ -982,38 +1031,4 @@ class StructureModel:
         steering_vectors = np.exp(+1j*phases)  # sv[nfrq,nth,nph,nant]
         steering_vectors = np.moveaxis(steering_vectors, -1, 0)
         return steering_vectors
-
-    def __getitem__(self, group_id):
-        if type(group_id) == str:
-            if group_id not in self.groups:
-                # New group
-                if not group_id:
-                    group_id = TaggedGroup._uniq_name('_group_', self.groups)
-                tg = TaggedGroup()
-                tg._group_id = group_id
-                self.groups[group_id] = tg
-            else:
-                tg = self.groups[group_id]
-        elif type(group_id) == tuple:
-            tg = self.groups[group_id[1]]
-        return tg
-    
-    def __setitem__(self, group_id, tag_group):
-        tag_group._group_id = group_id
-        self.groups[group_id] = tag_group
-
-    def __iter__(self):
-        for gid in self.groups:
-            for pid in self.groups[gid].parts:
-                yield gid, pid
-
-    def __str__(self):
-        indent = '    '
-        out = ["Model: "+self.name]
-        for g in self.groups:
-            out.append(indent+'group: '+ str(g))
-            _gs = self.groups[g]
-            for p in _gs.parts:
-                out.append(2*indent+"part: "+str(_gs.parts[p]))
-        return '\n'.join(out)
 
