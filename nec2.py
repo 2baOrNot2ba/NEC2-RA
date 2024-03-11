@@ -634,13 +634,15 @@ class StructureModel:
     def set_ground(self, grnd=Ground(1, 0, 0, 0)):
         self.ground = grnd    
 
-    def _assign_tags_base(self):
+    def _assign_tags_base(self, exclude_groups=None):
         """\
-        Assign sequential tag nrs to base groups and set up element tags
+        Assign sequential tag nrs to all groups except those in exclude group
+        which by default is none 
         """
         last_tag_nr = self._last_base_tag_nr
         # Set tags for non element groups
-        nonelemgrps = set(self.groups)-set(self.element)
+        exclude_groups = {} if exclude_groups is None else exclude_groups
+        nonelemgrps = set(self.groups)-set(exclude_groups)
         inc = 1
         for last_tag_nr, gid in enumerate(nonelemgrps, start=last_tag_nr+inc):
             self.groups[gid]._tag_nr = last_tag_nr
@@ -833,6 +835,12 @@ class ArrayModel(StructureModel):
         self.elements_tags = [[]]  # Map element nr to its tags 
         self.excited_elements = []
         self._last_elem_tag_nr = self._last_base_tag_nr
+
+    def _assign_tags_base(self):
+        """\
+        Overloaded method. Resets argument from default None to self.element
+        """
+        super()._assign_tags_base(exclude_groups=self.element)
 
     def _assign_tags_elem(self):
         """\
