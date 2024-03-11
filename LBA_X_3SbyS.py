@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from nec2 import (StructureModel, VoltageSource, FreqSteps, Wire,
+from nec2 import (ArrayModel, VoltageSource, FreqSteps, Wire,
                   ExecutionBlock, RadPatternSpec)
 
 np.set_printoptions(precision=4, linewidth=80)
@@ -20,7 +20,7 @@ l34 = (p3, p4)
 wire_radius = 0.003
 
 model_name = __file__.replace('.py','')
-lba_model = StructureModel(model_name)
+lba_model = ArrayModel(model_name)
 lba_model.set_commentline(lba_model.name)
 lba_model.set_commentline('Author: T. Carozzi')
 lba_model.set_commentline('Date: 2024-03-03')
