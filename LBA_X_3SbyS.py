@@ -43,9 +43,7 @@ _epl = RadPatternSpec(nth=3, dth=20.0, nph=0, dph=0., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
 eb_arr = ExecutionBlock(_frq_cntr_step, _port_ex, _epl)
 eepdat = lba_model.calc_eeps(eb_arr, save_necfile=True)
-#print(eepdat.eeps)
 eeldat = eepdat.get_EELs()
-print(eeldat.eels)
 
 print("Impedances")
 Z =  eepdat.get_impedances()
@@ -57,7 +55,8 @@ sv = lba_model.calc_steering_vector(eb_arr)
 
 refantnr = 0
 for antnr in range(nr_ants):
-    eep =  eepdat.eeps[antnr]
+    eep = eepdat.eeps[antnr]
+    eel = eeldat.eels[antnr]
     print("Antenna nr:", antnr)
     for fidx, frq in enumerate(eep.freqs):
         indent = '  '
@@ -82,6 +81,10 @@ for antnr in range(nr_ants):
             print(3*indent, str(np.angle(
                 eep.f_phi[fidx]*np.conj(_ref_amphs), deg=True)
                                 ).replace('\n', '\n'+3*indent))
+            #
+            print(2*indent+'eff. lengths')
+            print(3*indent, str(np.abs(eel.f_phi[fidx])
+                                ).replace('\n', '\n'+3*indent) )
             print(2*indent+'steering_phs')
             print(3*indent, str(np.angle(sv[antnr, fidx], deg=True)
                                 ).replace('\n', '\n'+3*indent))
