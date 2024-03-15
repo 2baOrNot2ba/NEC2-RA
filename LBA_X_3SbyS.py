@@ -34,7 +34,7 @@ arr_pos =[[0., 0., 0.], [0., 2., 0.],[0., 4., 0.]]
 lba_model.arrayify(element=['ant_X','puck'],
                    array_positions=arr_pos)
 nr_freqs = 1
-frq_cntr = 50.0
+frq_cntr = 70.0
 _frq_cntr_step = FreqSteps('lin', nr_freqs, frq_cntr, 2.0)
 lba_model.segmentalize(201, frq_cntr)
 _port_ex = ('LNA_x', VoltageSource(1.0))
@@ -43,6 +43,9 @@ _epl = RadPatternSpec(nth=3, dth=20.0, nph=0, dph=0., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
 eb_arr = ExecutionBlock(_frq_cntr_step, _port_ex, _epl)
 eepdat = lba_model.calc_eeps(eb_arr, save_necfile=True)
+#print(eepdat.eeps)
+eeldat = eepdat.get_EELs()
+print(eeldat.eels)
 
 print("Impedances")
 Z =  eepdat.get_impedances()
@@ -72,12 +75,12 @@ for antnr in range(nr_ants):
             #                                indexing='ij')
             #print(thetagrd, phigrd)
             print(2*indent+'E_phi_amp')
-            print(3*indent, str(np.abs(eep.ef_phi[fidx])
+            print(3*indent, str(np.abs(eep.f_phi[fidx])
                                 ).replace('\n', '\n'+3*indent))
             print(2*indent+'E_phi_phs')
-            _ref_amphs = eepdat.eeps[refantnr].ef_phi[fidx]
+            _ref_amphs = eepdat.eeps[refantnr].f_phi[fidx]
             print(3*indent, str(np.angle(
-                eep.ef_phi[fidx]*np.conj(_ref_amphs), deg=True)
+                eep.f_phi[fidx]*np.conj(_ref_amphs), deg=True)
                                 ).replace('\n', '\n'+3*indent))
             print(2*indent+'steering_phs')
             print(3*indent, str(np.angle(sv[antnr, fidx], deg=True)
