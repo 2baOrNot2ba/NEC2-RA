@@ -747,14 +747,17 @@ class StructureModel:
     def create_geom_for_exclusive_groups(self, d, subgroup_ids):
         pass
 
-    def create_excite_for_groups(self, d, subgroup_ids):
+    def create_excite_for_groups(self, d, subgroup_ids, _exciteports):
         subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
+        exciteportsdct = dict(_exciteports)
         for gid in subgroups:
             tag_nr = subgroups[gid]._tag_nr
             subgroups[gid]._assign_port_segs()
             for portid in subgroups[gid].get_ports():
                 port = subgroups[gid].get_ports(portid)
-                if not port.source: continue
+                if not port.source:
+                    if port.name not in exciteportsdct: continue
+                    port.source = exciteportsdct[port.name]
                 ex_seg = port.ex_seg
                 ex_type = port.source.nec_type()
                 if ex_type == 0:
@@ -808,7 +811,7 @@ class StructureModel:
 
             # Excitations
             # ... non element group
-            self.create_excite_for_groups(d, nonelemgrp)
+            self.create_excite_for_groups(d, nonelemgrp, _exciteports)
             # ... element group
             self.create_excite_for_exclusive_groups(d, _exciteports) ###
 
