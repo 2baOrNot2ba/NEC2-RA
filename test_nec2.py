@@ -15,7 +15,6 @@ def test_Deck():
     >>> test_Deck()
     True
     """
-    print("SYS", sys.path)
     d = Deck()
     d.append_card('GW', 0, 7, 0., 0., -.25, 0., 0., .25, 1.0E-5)
     d.append_card('GE', 0)
@@ -25,7 +24,7 @@ def test_Deck():
                ('GE', 0),
                ('EX', 0, 0, 4, 0, 1.0),
                ('EN',)])
-    print(d==d2)
+    print('Decks() are the same?', d==d2)
 
 
 def test_Deck_load_necfile():
@@ -96,6 +95,32 @@ def test_StructureModel():
         for pnr, portname in enumerate(ex_ports):
             print(portname, inp_parms.get_impedance()[pnr])
 
+def test_EEL():
+    lamhalf = 1.0
+    w_radii = 1e-5*2*lamhalf
+    dip_len = lamhalf
+    p1 = (0.,0.,-dip_len/2)
+    p2 = (0.,0.,+dip_len/2)
+    l12 = (p1, p2)
+    hertdip = ArrayModel('HertzianDip')
+    hertdip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    fs = FreqSteps('lin', 1, 10.)  # MHz
+    hertdip.segmentalize(565, fs.max_freq())
+    ex_port = ('VS', VoltageSource(1.0))
+    rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
+    arr_pos = [[0., 0., 0.0]]
+    hertdip.arrayify(element=['dip'], array_positions=arr_pos)
+    eb = ExecutionBlock(fs, ex_port, rps)
+    eepdat = hertdip.calc_eeps(eb, True)
+    eeldat= eepdat.get_EELs()
+    Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
+                  +np.abs(eeldat.eels[0].f_phi)**2)
+    efflen_theory = hertdip['dip']['Z'].length()/2.0
+    efflen_simult = Hsc_abs*np.abs(eepdat.eeps[0].inp_Z)
+    print('Effective length for Hertzian dipole...',
+          'Simulated:', np.ndarray.item(efflen_simult),
+          'Theory:', efflen_theory)
+    
 
 def test_ArrayModel_offcenter():
     lamhalf = 1.0
@@ -117,11 +142,11 @@ def test_ArrayModel_offcenter():
     sv = offcnt.calc_steering_vector(eb)
     ant_nr = 0
     frq_nr = 0
-    print('Steeing vector phases:')
+    print('Steering vector phases:')
     ref_ampphs0 = np.conj(sv[ant_nr, frq_nr,0,0])
     print(np.angle(sv[ant_nr, frq_nr]*ref_ampphs0, deg=True))
-    ref_ampphs = np.conj(eepdat.eeps[ant_nr].ef_phi[frq_nr][0,0])
-    _relangs = np.angle(eepdat.eeps[ant_nr].ef_phi[frq_nr]*ref_ampphs, deg=True)
+    ref_ampphs = np.conj(eepdat.eeps[ant_nr].f_phi[frq_nr][0,0])
+    _relangs = np.angle(eepdat.eeps[ant_nr].f_phi[frq_nr]*ref_ampphs, deg=True)
     print('Field phase rel. theta=0.')
     print(_relangs)
 
@@ -170,6 +195,7 @@ test_Deck()
 test_Deck_load_necfile()
 test_Deck_exec_pynec()
 test_StructureModel()
+test_EEL()
 test_ArrayModel_offcenter()
 test_Array_2_lamhalfdip_sbys()
 
