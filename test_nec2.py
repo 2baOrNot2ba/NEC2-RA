@@ -96,6 +96,11 @@ def test_StructureModel():
             print(portname, inp_parms.get_impedance()[pnr])
 
 def test_EEL():
+    """\
+    Test: Create an Abraham dipole and simulate its embedded element length
+
+    Ref: Lo 1988 p 6-5.
+    """
     lamhalf = 1.0
     w_radii = 1e-5*2*lamhalf
     dip_len = lamhalf
