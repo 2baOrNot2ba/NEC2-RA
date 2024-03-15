@@ -6,6 +6,8 @@ import pathlib
 import numpy as np
 #import PyNEC
 
+MU0 = 4*np.pi*1e-7  # H/m aka vacuum magnetic permeability
+
 PRGINPS = {'STGEOM', 'PCNTRL'}
 CARDS_COMMT = {'CE', 'CM'}
 CARDS_GEOMT = {'GA', 'GE', 'GF', 'GH', 'GM', 'GR', 'GS', 'GW', 'GX',
@@ -469,8 +471,9 @@ class NECout:
     freqs: typing.List
     thetas: typing.List
     phis: typing.List
-    ef_tht: typing.List
-    ef_phi: typing.List
+    f_tht: typing.List
+    f_phi: typing.List
+    f_type: str = 'Electric'
     inp_V: complex = None
     inp_I: complex = None
     inp_Z: complex = None
@@ -506,12 +509,39 @@ class StructureCurrents:
 
 class EEPdata:
     def __init__(self, nrants, nrfreqs):
-        self.eeps = []  # One EEP for each excitation ie element
+        self.eeps = []  # One NecOut (ie EEP) for each excitation (ie element)
         self.admittances = np.zeros((nrfreqs, nrants, nrants), complex)
+        self.excite_val = 0.0  # Amplitude
+        self.excite_typ = 'OC'  # 'OC' open-circuit implies current
+                                # 'SC' short-circuit implies voltage
     
     def get_impedances(self):
         return np.linalg.inv(self.admittances)
+    
+    def get_EELs(self):
+        """\
+        Calculate Embedded Element Lengths from EEPs
+        """
+        eeldata = EELdata(len(self.eeps), len(self.eeps[0].freqs),
+                          self.excite_typ)
+        for eep in self.eeps:
+            eel = NECout(eep.freqs, eep.thetas, eep.phis, None, None, 'efflen')
+            freqs = np.array(eep.freqs)[:, np.newaxis, np.newaxis]*1e6  # MHz2Hz
+            eel.f_tht = 2.j/(MU0 * freqs * self.excite_val) * eep.f_tht
+            eel.f_phi = 2.j/(MU0 * freqs * self.excite_val) * eep.f_phi
+            eeldata.eels.append(eel)
+        return eeldata
 
+
+
+class EELdata:
+    def __init__(self, nrants, nrfreqs, excite_typ='OC'):
+        self.eels = []  
+        self.admittances = np.zeros((nrfreqs, nrants, nrants), complex)
+        self.excite_typ = excite_typ
+    
+    def get_impedances(self):
+        return np.linalg.inv(self.admittances)
 
 class TaggedGroup:
 
@@ -943,8 +973,19 @@ class ArrayModel(StructureModel):
         return super().as_neccards(exclude_groups=self.element)
     
     def calc_eeps(self, eep_eb, save_necfile=False):
-        """Calculate embedded element patterns (EEPs) for array"""
-
+        """\
+        Calculate embedded element patterns (EEPs) for array
+        
+        Parameters
+        ----------
+        eep_eb : ExecutionBlock
+            The execution block to used to compute the EEPs
+        
+        Returns
+        -------
+        results : EEPdata
+            The EEP data.
+        """
         _frq_cntr_step = eep_eb.freqsteps
         freqs = _frq_cntr_step.aslist()
         _exciteport_name, _vltsrc = eep_eb.exciteports
@@ -1015,7 +1056,8 @@ class ArrayModel(StructureModel):
                 results.eeps.append(NECout(freqs, thetas, phis,
                                     np.array(ef_vert), np.array(ef_hori),
                                     inp_V=V, inp_I=I, inp_Z=Z))
-                
+        results.excite_val = port.source.value
+        results.excite_typ = 'SC'
         return results
 
     def calc_steering_vector(self, eep_eb):
