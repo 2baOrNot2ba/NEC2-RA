@@ -441,6 +441,7 @@ class RadPatternSpec:
         khat = np.moveaxis(khat, 0,-1)
         return khat
 
+
 @dataclass
 class Ground:
     iperf: int
@@ -533,7 +534,6 @@ class EEPdata:
         return eeldata
 
 
-
 class EELdata:
     def __init__(self, nrants, nrfreqs, excite_typ='OC'):
         self.eels = []  
@@ -542,6 +542,7 @@ class EELdata:
     
     def get_impedances(self):
         return np.linalg.inv(self.admittances)
+
 
 class TaggedGroup:
 
