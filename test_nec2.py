@@ -102,22 +102,22 @@ def test_EEL():
     p1 = (0.,0.,-dip_len/2)
     p2 = (0.,0.,+dip_len/2)
     l12 = (p1, p2)
-    hertdip = ArrayModel('HertzianDip')
-    hertdip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    abradip = ArrayModel('AbrahamDip')
+    abradip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
     fs = FreqSteps('lin', 1, 10.)  # MHz
-    hertdip.segmentalize(565, fs.max_freq())
+    abradip.segmentalize(565, fs.max_freq())
     ex_port = ('VS', VoltageSource(1.0))
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     arr_pos = [[0., 0., 0.0]]
-    hertdip.arrayify(element=['dip'], array_positions=arr_pos)
+    abradip.arrayify(element=['dip'], array_positions=arr_pos)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = hertdip.calc_eeps(eb, True)
+    eepdat = abradip.calc_eeps(eb, True)
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
-    efflen_theory = hertdip['dip']['Z'].length()/2.0
+    efflen_theory = abradip['dip']['Z'].length()/2.0
     efflen_simult = Hsc_abs*np.abs(eepdat.eeps[0].inp_Z)
-    print('Effective length for Hertzian dipole...',
+    print('Effective length for Abraham dipole...',
           'Simulated:', np.ndarray.item(efflen_simult),
           'Theory:', efflen_theory)
     
