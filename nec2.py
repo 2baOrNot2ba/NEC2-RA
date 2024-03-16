@@ -1,6 +1,5 @@
-import math
-import cmath
-from dataclasses import dataclass, astuple, field
+import copy
+from dataclasses import dataclass, astuple
 import typing
 import pathlib
 import numpy as np
@@ -509,16 +508,47 @@ class StructureCurrents:
 
 
 class EEPdata:
-    def __init__(self, nrants, nrfreqs):
+    def __init__(self, nrants, nrfreqs, excite_typ='OC', excite_val=1.):
         self.eeps = []  # One NecOut (ie EEP) for each excitation (ie element)
-        self.admittances = np.zeros((nrfreqs, nrants, nrants), complex)
-        self.excite_val = 0.0  # Amplitude
-        self.excite_typ = 'OC'  # 'OC' open-circuit implies current
-                                # 'SC' short-circuit implies voltage
+        self.excite_typ = excite_typ
+        # 'OC' open-circuit implies current
+        # 'SC' short-circuit implies voltage
+        if self.excite_typ == 'OC':
+            self.impedances = np.zeros((nrfreqs, nrants, nrants), complex)
+        elif self.excite_typ == 'SC':
+            self.admittances = np.zeros((nrfreqs, nrants, nrants), complex)
+        self.excite_val = excite_val  # Amplitude
     
     def get_impedances(self):
-        return np.linalg.inv(self.admittances)
+        if self.excite_typ == 'OC':
+            return self.impedances
+        elif self.excite_typ == 'SC':
+            return np.linalg.inv(self.admittances)
     
+    def transform_to(self, excite_typ):
+
+        if excite_typ == self.excite_typ:
+            return self
+        tr_eepdat = EEPdata(len(self.eeps), len(self.eeps[0].freqs))
+        tr_eepdat.eeps = copy.deepcopy(self.eeps)
+        f_tht_mat = np.asarray([_nec.f_tht for _nec in tr_eepdat.eeps])
+        f_tht_mat = np.expand_dims(np.moveaxis(f_tht_mat, [0,1], [-1,-2]), -1)
+        f_phi_mat = np.asarray([_nec.f_phi for _nec in tr_eepdat.eeps])
+        f_phi_mat = np.expand_dims(np.moveaxis(f_phi_mat, [0,1], [-1,-2]), -1)
+        if self.excite_typ == 'SC':
+            if excite_typ == 'OC':
+                # Transform from SC
+                imp_mat = self.get_impedances()
+                tr_f_tht_mat = imp_mat @ f_tht_mat
+                tr_f_phi_mat = imp_mat @ f_phi_mat
+        tr_f_tht_mat = np.moveaxis(tr_f_tht_mat.squeeze(-1), [-1,-2],[0,1])
+        tr_f_phi_mat = np.moveaxis(tr_f_phi_mat.squeeze(-1), [-1,-2],[0,1])
+        for antnr, _eep in enumerate(tr_eepdat.eeps):
+            _eep.f_tht = tr_f_tht_mat[antnr]
+            _eep.f_phi = tr_f_phi_mat[antnr]
+        return tr_eepdat
+
+        
     def get_EELs(self):
         """\
         Calculate Embedded Element Lengths from EEPs
@@ -534,14 +564,10 @@ class EEPdata:
         return eeldata
 
 
-class EELdata:
+class EELdata(EEPdata):
     def __init__(self, nrants, nrfreqs, excite_typ='OC'):
-        self.eels = []  
-        self.admittances = np.zeros((nrfreqs, nrants, nrants), complex)
-        self.excite_typ = excite_typ
-    
-    def get_impedances(self):
-        return np.linalg.inv(self.admittances)
+        super().__init__(nrants, nrfreqs, excite_typ, excite_val=1.)
+        self.eels = []
 
 
 class TaggedGroup:
@@ -995,7 +1021,7 @@ class ArrayModel(StructureModel):
         _exciteport_name, _vltsrc = eep_eb.exciteports
         _rad_pat = eep_eb.radpat
         nr_ants = len(self.arr_delta_pos)
-        results = EEPdata(nr_ants, len(freqs))
+        results = EEPdata(nr_ants, len(freqs), 'SC')
         sc = StructureCurrents(freqs, nr_ants)
         for antnr in range(nr_ants):
             _prt_exc = ((antnr, _exciteport_name), _vltsrc)
@@ -1034,6 +1060,7 @@ class ArrayModel(StructureModel):
                     else:
                         thetas = None
                         phis = None
+                    
                     # Get structure currents
                     _sc_f = nec_context.get_structure_currents(f)
                     _currents = _sc_f.get_current()
@@ -1061,7 +1088,6 @@ class ArrayModel(StructureModel):
                                     np.array(ef_vert), np.array(ef_hori),
                                     inp_V=V, inp_I=I, inp_Z=Z))
         results.excite_val = port.source.value
-        results.excite_typ = 'SC'
         return results
 
     def calc_steering_vector(self, eep_eb):
