@@ -1104,7 +1104,7 @@ class ArrayModel(StructureModel):
         pos = self.arr_delta2arr_pos(self.arr_delta_pos)
         pos = np.array(pos)  # pos.shape = (nant, xyz)
         phases_hat = np.matmul(khat, pos.T)  # khat[nth,nph,xyz] pos[nant,xyz]
-        print(khat[-1,0,:],pos[:,1])  # phase_hat.shape = (nth, nph, nant)
+                                            # phase_hat.shape = (nth, nph, nant)
         _freqs = eep_eb.freqsteps.aslist()
         k = 2*np.pi/3e2*np.array(_freqs)  # k=2pi*freq/c, shape = (nfrq,)
         phases = k[:, np.newaxis, np.newaxis, np.newaxis] * phases_hat
