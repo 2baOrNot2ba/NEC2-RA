@@ -42,11 +42,11 @@ nr_ants = len(arr_pos)
 _epl = RadPatternSpec(nth=3, dth=20.0, nph=0, dph=1., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
 eb_arr = ExecutionBlock(_frq_cntr_step, _port_ex, _epl)
-eepSCdat = lba_model.calc_eeps(eb_arr, save_necfile=True)
+eepSCdat = lba_model.calc_eep_SC(eb_arr, save_necfile=True)
 eelSCdat = eepSCdat.get_EELs()
 eepOCdat = eepSCdat.transform_to('OC')
 eelOCdat = eepOCdat.get_EELs()
-eepdat = eepSCdat
+eepdat = eepOCdat
 eeldat = eelOCdat
 print("Impedances")
 Z =  eepdat.get_impedances()
