@@ -95,11 +95,9 @@ def test_StructureModel():
         for pnr, portname in enumerate(ex_ports):
             print(portname, inp_parms.get_impedance()[pnr])
 
-def test_EEL():
+def sim_abraham_dip(freq):
     """\
-    Test: Create an Abraham dipole and simulate its embedded element length
-
-    Ref: Lo 1988 p 6-5.
+    Create an Abraham dipole for a given frequency
     """
     lamhalf = 1.0
     w_radii = 1e-5*2*lamhalf
@@ -107,16 +105,27 @@ def test_EEL():
     p1 = (0.,0.,-dip_len/2)
     p2 = (0.,0.,+dip_len/2)
     l12 = (p1, p2)
+    port_name = 'VS'
     abradip = ArrayModel('AbrahamDip')
-    abradip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
-    fs = FreqSteps('lin', 1, 10.)  # MHz
-    abradip.segmentalize(565, fs.max_freq())
-    ex_port = ('VS', VoltageSource(1.0))
-    rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
+    abradip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5, port_name)
+    abradip.segmentalize(565, freq)
     arr_pos = [[0., 0., 0.0]]
     abradip.arrayify(element=['dip'], array_positions=arr_pos)
+    return abradip, port_name
+
+
+def test_EEL():
+    """\
+    Test: Create an Abraham dipole and simulate its embedded element length
+
+    Ref: Lo 1988 p 6-5.
+    """
+    fs = FreqSteps('lin', 1, 10.)  # MHz
+    abradip, port_name = sim_abraham_dip(fs.max_freq())
+    ex_port = (port_name, VoltageSource(1.0))
+    rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = abradip.calc_eeps(eb, True)
+    eepdat = abradip.calc_eep_SC(eb, True)
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
@@ -126,6 +135,20 @@ def test_EEL():
           'Simulated:', np.ndarray.item(efflen_simult),
           'Theory:', efflen_theory)
     
+def test_SC_OC_transforms():
+    fs = FreqSteps('lin', 1, 10.)  # MHz
+    abradip, port_name = sim_abraham_dip(fs.max_freq())
+    ex_port = (port_name, VoltageSource(1.0))
+    rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
+    eb = ExecutionBlock(fs, ex_port, rps)
+    eep_SC = abradip.calc_eep_SC(eb)
+    eep_OC = eep_SC.transform_to('OC')
+    eep_OC_SC = eep_OC.transform_to('SC')
+    fs2 = FreqSteps('lin', 1, 20.)  # MHz
+    eep_SC2 = abradip.calc_eep_SC(ExecutionBlock(fs2, ex_port, rps))
+    print("Should be False:", eep_SC2 == eep_SC)
+    print("Should be True:", eep_OC_SC == eep_SC)
+
 
 def test_ArrayModel_offcenter():
     lamhalf = 1.0
@@ -143,7 +166,7 @@ def test_ArrayModel_offcenter():
     arr_pos = [[10., 21., 15.]]
     offcnt.arrayify(element=['dip'], array_positions=arr_pos)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = offcnt.calc_eeps(eb, save_necfile=True)
+    eepdat = offcnt.calc_eep_SC(eb, save_necfile=True)
     sv = offcnt.calc_steering_vector(eb)
     ant_nr = 0
     frq_nr = 0
@@ -181,7 +204,7 @@ def test_Array_2_lamhalfdip_sbys():
         arr_pos = [[0.,0.,0.], [dist, 0., 0.]]
         twodip.arrayify(element=['dip'],
                         array_positions=arr_pos)
-        eepdat = twodip.calc_eeps(ExecutionBlock(fs, ex_port))
+        eepdat = twodip.calc_eep_SC(ExecutionBlock(fs, ex_port))
         impmat = eepdat.get_impedances()
         mutimp.append(impmat[0,0,1])
     mutimp = np.array(mutimp)
@@ -201,6 +224,7 @@ test_Deck_load_necfile()
 test_Deck_exec_pynec()
 test_StructureModel()
 test_EEL()
+test_SC_OC_transforms()
 test_ArrayModel_offcenter()
 test_Array_2_lamhalfdip_sbys()
 
