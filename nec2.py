@@ -564,7 +564,16 @@ class EEPdata:
             _eels.append(eel)
         eeldata = EELdata(_eels, adm_or_imp, self.excite_typ)
         return eeldata
-
+    
+    def __eq__(self, __value: object) -> bool:
+        if self.excite_typ != __value.excite_typ:
+            return False
+        other_eeps = __value.eeps
+        for antnr, eep in enumerate(self.eeps):
+            if eep != other_eeps[antnr]:
+                return False
+        return True
+            
 
 class EEP_SC(EEPdata):
     def __init__(self, eep_sc, admittances_arr, voltage_excite=1.0):
