@@ -530,22 +530,8 @@ class EEPdata:
             return self.impedances
         elif self.excite_typ == 'SC':
             return np.linalg.inv(self.admittances)
-        
-    def _get_matfromlist(self, eep_list):
-        f_tht_mat = np.asarray([_nec.f_tht for _nec in eep_list])
-        f_tht_mat = np.expand_dims(np.moveaxis(f_tht_mat, [0,1], [-1,-2]), -1)
-        f_phi_mat = np.asarray([_nec.f_phi for _nec in eep_list])
-        f_phi_mat = np.expand_dims(np.moveaxis(f_phi_mat, [0,1], [-1,-2]), -1)
-        return f_tht_mat, f_phi_mat
-    
-    def _set_listfrommat(self, eep_list, f_tht_mat, f_phi_mat):
-        f_tht_mat = np.moveaxis(f_tht_mat.squeeze(-1), [-1,-2],[0,1])
-        f_phi_mat = np.moveaxis(f_phi_mat.squeeze(-1), [-1,-2],[0,1])
-        for antnr, _eep in enumerate(eep_list):
-            _eep.f_tht = f_tht_mat[antnr]
-            _eep.f_phi = f_phi_mat[antnr]
 
-    def get_embedded_elements(self):
+    def _get_embedded_elements(self):
         return self.eeps
     
     def get_antspats_arr(self):
@@ -558,11 +544,16 @@ class EEPdata:
             The radiation patterns for all antennas.
             The indices are [antnr, freqnr, thetanr, phinr, polnr].
         """
-        eep_list = self.get_embedded_elements()
+        eep_list = self._get_embedded_elements()
         f_tht_mat = np.array([_nec.f_tht for _nec in eep_list])
         f_phi_mat = np.array([_nec.f_phi for _nec in eep_list])
         antspats = np.stack((f_tht_mat, f_phi_mat), axis=-1)
         return antspats
+    
+    def set_antspat_arr(self, antspat):
+        for antnr, _eep in enumerate(self._get_embedded_elements()):
+            _eep.f_tht = antspat[antnr, ..., 0]
+            _eep.f_phi = antspat[antnr, ..., 1]
 
     def get_EELs(self):
         """\
@@ -604,20 +595,23 @@ class EEP_SC(EEPdata):
     def transform_to(self, excite_typ, excite_val=1., imp_load=None):
         if excite_typ == self.excite_typ:
             return self
+        imp_arr = self.get_impedances()
+        antspat_SC = self.get_antspats_arr()
+        antspat_SC = np.expand_dims(np.moveaxis(antspat_SC, [0],[-1]), -1)
         if excite_typ == 'OC':
-            imp_mat = self.get_impedances()
-            tr_eepdat = EEP_OC(self.eeps, imp_mat, excite_val)
-            f_tht_mat, f_phi_mat = self._get_matfromlist(tr_eepdat.eeps)
-            tr_f_tht_mat = imp_mat @ f_tht_mat
-            tr_f_phi_mat = imp_mat @ f_phi_mat
+            eepdat_tr = EEP_OC(self._get_embedded_elements(), imp_arr,
+                               excite_val)
+            # Warnick2021 eq. 7
+            antspat_tr = imp_arr @ antspat_SC
         if excite_typ == 'TH':
-            imp_mat = self.get_impedances()
-            tr_eepdat = EEP_TH(self.eeps, imp_mat, imp_load, excite_val)
-            f_tht_mat, f_phi_mat = self._get_matfromlist(tr_eepdat.eeps)
-            tr_f_tht_mat = imp_mat @ f_tht_mat
-            tr_f_phi_mat = imp_mat @ f_phi_mat
-        self._set_listfrommat(tr_eepdat.eeps, tr_f_tht_mat, tr_f_phi_mat)
-        return tr_eepdat
+            eepdat_tr = EEP_TH(self._get_embedded_elements(), imp_arr,
+                               imp_load, excite_val)
+            # Warnick2021 eqs
+            antspat_tr = (np.linalg.inv(imp_arr+np.linalg.inv(imp_load))
+                          @ antspat_tr)
+        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1),[-1],[0])
+        eepdat_tr.set_antspat_arr(antspat_tr)
+        return eepdat_tr
 
 
 class EEP_OC(EEPdata):
@@ -627,17 +621,26 @@ class EEP_OC(EEPdata):
         self.current_excite = current_excite
         self.excite_typ = 'OC'
     
-    def transform_to(self, excite_typ, excite_val=1.):
+    def transform_to(self, excite_typ, excite_val=1., imp_load=None):
         if excite_typ == self.excite_typ:
             return self
+        antspat_OC = self.get_antspats_arr()
+        antspat_OC = np.expand_dims(np.moveaxis(antspat_OC, [0],[-1]), -1)
         if excite_typ == 'SC':
-            adm_mat = self.get_admittances()
-            tr_eepdat = EEP_SC(self.eeps, adm_mat, excite_val)
-            f_tht_mat, f_phi_mat = self._get_matfromlist(tr_eepdat.eeps)
-            tr_f_tht_mat = adm_mat @ f_tht_mat
-            tr_f_phi_mat = adm_mat @ f_phi_mat
-        self._set_listfrommat(tr_eepdat.eeps, tr_f_tht_mat, tr_f_phi_mat)
-        return tr_eepdat
+            adm_arr = self.get_admittances()
+            eepdat_tr = EEP_SC(self._get_embedded_elements(), adm_arr,
+                               excite_val)
+            # Warnick2021 eq. 7
+            antspat_tr = adm_arr @ antspat_OC
+        elif excite_typ == 'TH':
+            imp_arr = self.get_impedances()
+            eepdat_tr = EEP_TH(self._get_embedded_elements(), imp_arr,
+                               imp_load, excite_val)
+            # Warnick2021 eq. 4
+            antspat_tr = imp_load @ np.linalg(imp_load+imp_arr) @ antspat_OC
+        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1),[-1],[0])
+        eepdat_tr.set_antspat_arr(antspat_tr)
+        return eepdat_tr
 
 
 class EEP_TH(EEPdata):
@@ -648,6 +651,29 @@ class EEP_TH(EEPdata):
         self.voltage_excite = voltage_excite
         self.excite_typ = 'TH'
 
+    def transform_to(self, excite_typ, excite_val=1.):
+        if excite_typ == self.excite_typ:
+            return self
+        adm_arr = self.get_admittances()
+        imp_arr = self.get_impedances()
+        adm_load = np.linalg.inv(self.imp_load)
+        antspat_TH = self.get_antspats_arr()
+        antspat_TH = np.expand_dims(np.moveaxis(antspat_TH, [0],[-1]), -1)
+        if excite_typ == 'SC':
+            eepdat_tr = EEP_SC(self._get_embedded_elements(), adm_arr,
+                               excite_val)
+            # Warnick2021 eqs
+            antspat_tr = (adm_load + adm_arr) @ antspat_TH
+        elif excite_typ == 'OC':
+            eepdat_tr = EEP_OC(self._get_embedded_elements(), adm_arr,
+                               excite_val)
+            # Warnick2021 eq. 4
+            antspat_tr = (self.imp_load + imp_arr) @ adm_load @ antspat_TH
+        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1),[-1],[0])
+        eepdat_tr.set_antspat_arr(antspat_tr)
+        return eepdat_tr
+    
+
 
 class EELdata(EEPdata):
     def __init__(self, eels, adm_or_imp, excite_typ):
@@ -655,7 +681,7 @@ class EELdata(EEPdata):
         self.adm_or_imp = adm_or_imp
         self.excite_typ = excite_typ
 
-    def get_embedded_elements(self):
+    def _get_embedded_elements(self):
         return self.eels
 
 
