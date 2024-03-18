@@ -545,6 +545,25 @@ class EEPdata:
             _eep.f_tht = f_tht_mat[antnr]
             _eep.f_phi = f_phi_mat[antnr]
 
+    def get_embedded_elements(self):
+        return self.eeps
+    
+    def get_antspats_arr(self):
+        """\
+        Get EEPs as one big array
+
+        Returns
+        -------
+        antspats: array
+            The radiation patterns for all antennas.
+            The indices are [antnr, freqnr, thetanr, phinr, polnr].
+        """
+        eep_list = self.get_embedded_elements()
+        f_tht_mat = np.array([_nec.f_tht for _nec in eep_list])
+        f_phi_mat = np.array([_nec.f_phi for _nec in eep_list])
+        antspats = np.stack((f_tht_mat, f_phi_mat), axis=-1)
+        return antspats
+
     def get_EELs(self):
         """\
         Calculate Embedded Element Lengths from EEPs
@@ -582,12 +601,18 @@ class EEP_SC(EEPdata):
         self.voltage_excite = voltage_excite
         self.excite_typ = 'SC'
     
-    def transform_to(self, excite_typ, excite_val=1.):
+    def transform_to(self, excite_typ, excite_val=1., imp_load=None):
         if excite_typ == self.excite_typ:
             return self
         if excite_typ == 'OC':
             imp_mat = self.get_impedances()
             tr_eepdat = EEP_OC(self.eeps, imp_mat, excite_val)
+            f_tht_mat, f_phi_mat = self._get_matfromlist(tr_eepdat.eeps)
+            tr_f_tht_mat = imp_mat @ f_tht_mat
+            tr_f_phi_mat = imp_mat @ f_phi_mat
+        if excite_typ == 'TH':
+            imp_mat = self.get_impedances()
+            tr_eepdat = EEP_TH(self.eeps, imp_mat, imp_load, excite_val)
             f_tht_mat, f_phi_mat = self._get_matfromlist(tr_eepdat.eeps)
             tr_f_tht_mat = imp_mat @ f_tht_mat
             tr_f_phi_mat = imp_mat @ f_phi_mat
@@ -612,14 +637,26 @@ class EEP_OC(EEPdata):
             tr_f_tht_mat = adm_mat @ f_tht_mat
             tr_f_phi_mat = adm_mat @ f_phi_mat
         self._set_listfrommat(tr_eepdat.eeps, tr_f_tht_mat, tr_f_phi_mat)
-        return tr_eepdat        
-    
+        return tr_eepdat
+
+
+class EEP_TH(EEPdata):
+    def __init__(self, eep_th, imp_arr, imp_load, voltage_excite=1.0):
+        self.eeps = eep_th
+        self.impedances = imp_arr
+        self.imp_load = imp_load
+        self.voltage_excite = voltage_excite
+        self.excite_typ = 'TH'
+
 
 class EELdata(EEPdata):
     def __init__(self, eels, adm_or_imp, excite_typ):
         self.eels = eels
         self.adm_or_imp = adm_or_imp
         self.excite_typ = excite_typ
+
+    def get_embedded_elements(self):
+        return self.eels
 
 
 class TaggedGroup:
