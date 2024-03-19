@@ -95,6 +95,7 @@ def test_StructureModel():
         for pnr, portname in enumerate(ex_ports):
             print(portname, inp_parms.get_impedance()[pnr])
 
+
 def sim_abraham_dip(freq):
     """\
     Create an Abraham dipole for a given frequency
@@ -106,11 +107,11 @@ def sim_abraham_dip(freq):
     p2 = (0.,0.,+dip_len/2)
     l12 = (p1, p2)
     port_name = 'VS'
-    abradip = ArrayModel('AbrahamDip')
+    abradip = StructureModel('AbrahamDip')
     abradip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5, port_name)
     abradip.segmentalize(565, freq)
-    arr_pos = [[0., 0., 0.0]]
-    abradip.arrayify(element=['dip'], array_positions=arr_pos)
+    #arr_pos = [[0., 0., 0.0]]
+    #abradip.arrayify(element=['dip'], array_positions=arr_pos)
     return abradip, port_name
 
 
@@ -124,8 +125,8 @@ def test_EEL():
     abradip, port_name = sim_abraham_dip(fs.max_freq())
     ex_port = (port_name, VoltageSource(1.0))
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
-    eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = abradip.calc_eeps_SC(eb, True)
+    eb = ExecutionBlock(fs, [ex_port], rps)
+    eepdat = abradip.calc_eep_SC(eb, True)
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
@@ -140,12 +141,12 @@ def test_SC_OC_transforms():
     abradip, port_name = sim_abraham_dip(fs.max_freq())
     ex_port = (port_name, VoltageSource(1.0))
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
-    eb = ExecutionBlock(fs, ex_port, rps)
-    eep_SC = abradip.calc_eeps_SC(eb)
+    eb = ExecutionBlock(fs, [ex_port], rps)
+    eep_SC = abradip.calc_eep_SC(eb)
     eep_OC = eep_SC.transform_to('OC')
     eep_OC_SC = eep_OC.transform_to('SC')
     fs2 = FreqSteps('lin', 1, 20.)  # MHz
-    eep_SC2 = abradip.calc_eeps_SC(ExecutionBlock(fs2, ex_port, rps))
+    eep_SC2 = abradip.calc_eep_SC(ExecutionBlock(fs2, [ex_port], rps))
     print("EEPs. Should be False:", eep_SC2 == eep_SC)
     print("EEPS. Should be True:", eep_OC_SC == eep_SC)
     eel_SC = eep_SC.get_EELs()
