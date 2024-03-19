@@ -110,8 +110,6 @@ def sim_abraham_dip(freq):
     abradip = StructureModel('AbrahamDip')
     abradip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5, port_name)
     abradip.segmentalize(565, freq)
-    #arr_pos = [[0., 0., 0.0]]
-    #abradip.arrayify(element=['dip'], array_positions=arr_pos)
     return abradip, port_name
 
 

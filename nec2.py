@@ -1060,7 +1060,7 @@ class StructureModel:
             return necout, nec_context
 
     def calc_eep_SC(self, eb, save_necfile=False):
-            necout, _ = self.get_necout(eb)
+            necout, _ = self.get_necout(eb, save_necfile)
             eep_sc = EEP_SC([necout], np.atleast_2d(1/necout.inp_Z),
                              eb.exciteports[0][1].value)
             return eep_sc
