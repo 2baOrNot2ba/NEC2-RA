@@ -1018,6 +1018,52 @@ class StructureModel:
         # END
         d.append_card('EN', 0)
         return d
+    
+    def get_necout(self, eb, save_necfile=False, eb_id_suffix=''):
+            self.add_executionblock('eb'+eb_id_suffix, eb, reset=True)
+            _deck = self.as_neccards()
+            if save_necfile:
+                _deck.save_necfile(self.name+eb_id_suffix)
+            freqs = eb.freqsteps.aslist()
+            for nec_context in _deck.exec_pynec():
+                ef_vert = []
+                ef_hori = []
+                for f in range(len(freqs)):
+                    # Input (excitation) parameters
+                    inp_parms = nec_context.get_input_parameters(f)
+                    # ##frequency = inp_parms.get_frequency()
+                    Z = inp_parms.get_impedance()
+                    I = inp_parms.get_current()
+                    V = inp_parms.get_voltage()
+
+                    # Radiation pattern
+                    radpat_out = nec_context.get_radiation_pattern(f)
+                    # Coordinates theta,phi are the same for all frequecies,
+                    # but easiest to just get it for each freq spec.
+                    if radpat_out:
+                        thetas = radpat_out.get_theta_angles()
+                        phis = radpat_out.get_phi_angles()
+                        # Fields
+                        ef_vert_fr = radpat_out.get_e_theta()
+                        ef_vert_fr = ef_vert_fr.reshape(
+                                                (len(phis), len(thetas))).T
+                        ef_hori_fr = radpat_out.get_e_phi()
+                        ef_hori_fr = ef_hori_fr.reshape(
+                                                (len(phis), len(thetas))).T
+                        ef_hori.append(ef_hori_fr)
+                        ef_vert.append(ef_vert_fr)
+                    else:
+                        thetas = None
+                        phis = None
+                necout = NECout(freqs, thetas, phis, np.array(ef_vert),
+                                 np.array(ef_hori), inp_V=V, inp_I=I, inp_Z=Z)
+            return necout, nec_context
+
+    def calc_eep_SC(self, eb, save_necfile=False):
+            necout, _ = self.get_necout(eb)
+            eep_sc = EEP_SC([necout], np.atleast_2d(1/necout.inp_Z),
+                             eb.exciteports[0][1].value)
+            return eep_sc
 
     def __getitem__(self, group_id):
         if type(group_id) == str:
@@ -1169,7 +1215,7 @@ class ArrayModel(StructureModel):
 
     def as_neccards(self):
         return super().as_neccards(exclude_groups=self.element)
-    
+
     def calc_eeps_SC(self, eep_eb, save_necfile=False):
         """\
         Calculate embedded element patterns (EEPs) for array
@@ -1195,67 +1241,33 @@ class ArrayModel(StructureModel):
         for antnr in range(nr_ants):
             _prt_exc = ((antnr, _exciteport_name), _vltsrc)
             _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat)
-            self.add_executionblock('xb'+str(antnr), _xb, reset=True)
-            _deck = self.as_neccards()
-            if save_necfile:
-                _deck.save_necfile(self.name+str(antnr))
-            for nec_context in _deck.exec_pynec():
-                ef_vert = []
-                ef_hori = []
-                for f in range(len(freqs)):
-                    # Input (excitation) parameters
-                    inp_parms = nec_context.get_input_parameters(f)
-                    # ##frequency = inp_parms.get_frequency()
-                    Z = inp_parms.get_impedance()
-                    I = inp_parms.get_current()
-                    V = inp_parms.get_voltage()
+            _necout, nec_context = super().get_necout(_xb, save_necfile,
+                                                      eb_id_suffix=str(antnr))
+            _eep_sc.append(_necout)
+            for f in range(len(freqs)):
+                # Get structure currents
+                _sc_f = nec_context.get_structure_currents(f)
+                _currents = _sc_f.get_current()
+                _sc_segtags = _sc_f.get_current_segment_tag()
+                _sc_segnums = _sc_f.get_current_segment_number()
+                sc.currents = _currents
+                sc.set_segtags(_sc_segtags)
+                sc.set_segnums(_sc_segnums)
 
-                    # Radiation pattern
-                    radpat_out = nec_context.get_radiation_pattern(f)
-                    # Coordinates theta,phi are the same for all frequecies,
-                    # but easiest to just get it for each freq spec.
-                    if radpat_out:
-                        thetas = radpat_out.get_theta_angles()
-                        phis = radpat_out.get_phi_angles()
-                        # Fields
-                        ef_vert_fr = radpat_out.get_e_theta()
-                        ef_vert_fr = ef_vert_fr.reshape(
-                                                (len(phis), len(thetas))).T
-                        ef_hori_fr = radpat_out.get_e_phi()
-                        ef_hori_fr = ef_hori_fr.reshape(
-                                                (len(phis), len(thetas))).T
-                        ef_hori.append(ef_hori_fr)
-                        ef_vert.append(ef_vert_fr)
-                    else:
-                        thetas = None
-                        phis = None
-                    
-                    # Get structure currents
-                    _sc_f = nec_context.get_structure_currents(f)
-                    _currents = _sc_f.get_current()
-                    _sc_segtags = _sc_f.get_current_segment_tag()
-                    _sc_segnums = _sc_f.get_current_segment_number()
-                    sc.currents = _currents
-                    sc.set_segtags(_sc_segtags)
-                    sc.set_segnums(_sc_segnums)
-
-                    # Find mutual-impedances
-                    admittances_T = []
-                    gid = self._port_group(_exciteport_name)
-                    port = self.groups[gid].get_ports(_exciteport_name)
-                    elemgrpidx = self.element.index(gid)
-                    for _antnr_j in range(nr_ants):
-                        ex_tag = self.elements_tags[_antnr_j][elemgrpidx]
-                        ex_seg = None
-                        if port.source:
-                            ex_seg = port.ex_seg
-                        cur_port = sc.get_current(ex_tag, ex_seg)
-                        admittances_T.append(cur_port / port.source.value)
-                    _admittances[f,:,antnr] = np.array(admittances_T)
-                _eep_sc.append(NECout(freqs, thetas, phis,
-                                    np.array(ef_vert), np.array(ef_hori),
-                                    inp_V=V, inp_I=I, inp_Z=Z))
-        results = EEP_SC(_eep_sc, _admittances, port.source.value)
+                # Find mutual-impedances
+                admittances_T = []
+                gid = self._port_group(_exciteport_name)
+                port = self.groups[gid].get_ports(_exciteport_name)
+                elemgrpidx = self.element.index(gid)
+                for _antnr_j in range(nr_ants):
+                    ex_tag = self.elements_tags[_antnr_j][elemgrpidx]
+                    ex_seg = None
+                    if port.source:
+                        ex_seg = port.ex_seg
+                    cur_port = sc.get_current(ex_tag, ex_seg)
+                    admittances_T.append(cur_port / port.source.value)
+                _admittances[f,:,antnr] = np.array(admittances_T)
+        results = EEP_SC(_eep_sc, _admittances, _vltsrc.value)
         return results
 
     def calc_steering_vector(self, eep_eb):
