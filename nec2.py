@@ -1170,7 +1170,7 @@ class ArrayModel(StructureModel):
     def as_neccards(self):
         return super().as_neccards(exclude_groups=self.element)
     
-    def calc_eep_SC(self, eep_eb, save_necfile=False):
+    def calc_eeps_SC(self, eep_eb, save_necfile=False):
         """\
         Calculate embedded element patterns (EEPs) for array
         

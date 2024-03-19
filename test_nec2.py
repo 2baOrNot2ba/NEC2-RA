@@ -125,7 +125,7 @@ def test_EEL():
     ex_port = (port_name, VoltageSource(1.0))
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = abradip.calc_eep_SC(eb, True)
+    eepdat = abradip.calc_eeps_SC(eb, True)
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
@@ -141,11 +141,11 @@ def test_SC_OC_transforms():
     ex_port = (port_name, VoltageSource(1.0))
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eep_SC = abradip.calc_eep_SC(eb)
+    eep_SC = abradip.calc_eeps_SC(eb)
     eep_OC = eep_SC.transform_to('OC')
     eep_OC_SC = eep_OC.transform_to('SC')
     fs2 = FreqSteps('lin', 1, 20.)  # MHz
-    eep_SC2 = abradip.calc_eep_SC(ExecutionBlock(fs2, ex_port, rps))
+    eep_SC2 = abradip.calc_eeps_SC(ExecutionBlock(fs2, ex_port, rps))
     print("EEPs. Should be False:", eep_SC2 == eep_SC)
     print("EEPS. Should be True:", eep_OC_SC == eep_SC)
     eel_SC = eep_SC.get_EELs()
@@ -176,7 +176,7 @@ def test_ArrayModel_offcenter():
     arr_pos = [[10., 21., 15.]]
     offcnt.arrayify(element=['dip'], array_positions=arr_pos)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = offcnt.calc_eep_SC(eb, save_necfile=True)
+    eepdat = offcnt.calc_eeps_SC(eb, save_necfile=True)
     sv = offcnt.calc_steering_vector(eb)
     ant_nr = 0
     frq_nr = 0
@@ -214,7 +214,7 @@ def test_Array_2_lamhalfdip_sbys():
         arr_pos = [[0.,0.,0.], [dist, 0., 0.]]
         twodip.arrayify(element=['dip'],
                         array_positions=arr_pos)
-        eepdat = twodip.calc_eep_SC(ExecutionBlock(fs, ex_port))
+        eepdat = twodip.calc_eeps_SC(ExecutionBlock(fs, ex_port))
         impmat = eepdat.get_impedances()
         mutimp.append(impmat[0,0,1])
     mutimp = np.array(mutimp)

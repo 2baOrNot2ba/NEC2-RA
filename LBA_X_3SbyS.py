@@ -40,9 +40,11 @@ nr_ants = len(arr_pos)
 _epl = RadPatternSpec(nth=3, dth=20.0, nph=0, dph=1., phis=90.)
 print('Wavelength', 3e2/frq_cntr)
 eb_arr = ExecutionBlock(_frq_cntr_step, _port_ex, _epl)
-eepSCdat = lba_model.calc_eep_SC(eb_arr, save_necfile=True)
+eepSCdat = lba_model.calc_eeps_SC(eb_arr, save_necfile=True)
 eelSCdat = eepSCdat.get_EELs()
 eepOCdat = eepSCdat.transform_to('OC')
+eepTHdat = eepSCdat.transform_to('TH', imp_load=50.*np.identity(nr_ants))
+#eelTHdat = eepTHdat.get_EELs()
 eelOCdat = eepOCdat.get_EELs()
 eepdat = eepOCdat
 eeldat = eelOCdat
