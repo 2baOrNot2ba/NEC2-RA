@@ -130,7 +130,7 @@ def test_EEL():
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
     efflen_theory = abradip['dip']['Z'].length()/2.0
-    efflen_simult = Hsc_abs*np.abs(eepdat.eeps[0].inp_Z)
+    efflen_simult = Hsc_abs*np.abs(eeldat.eels[0].inp_Z)
     print('Effective length for Abraham dipole...',
           'Simulated:', np.ndarray.item(efflen_simult),
           'Theory:', efflen_theory)
@@ -146,8 +146,18 @@ def test_SC_OC_transforms():
     eep_OC_SC = eep_OC.transform_to('SC')
     fs2 = FreqSteps('lin', 1, 20.)  # MHz
     eep_SC2 = abradip.calc_eep_SC(ExecutionBlock(fs2, ex_port, rps))
-    print("Should be False:", eep_SC2 == eep_SC)
-    print("Should be True:", eep_OC_SC == eep_SC)
+    print("EEPs. Should be False:", eep_SC2 == eep_SC)
+    print("EEPS. Should be True:", eep_OC_SC == eep_SC)
+    eel_SC = eep_SC.get_EELs()
+    eel_OC_SC = eep_OC_SC.get_EELs()
+    eel_SC2 = eep_SC2.get_EELs()
+    print("EELs. Should be False:", eel_SC2 == eel_SC)
+    print("EELs. Should be True:", eel_OC_SC == eel_SC)
+    # Thevenin
+    eep_NO = eep_SC.transform_to('NO', adm_load=1/50. * np.identity(1))
+    eel_NO = eep_NO.get_EELs()
+    print(eel_SC.eels)
+    print(eel_NO.eels)
 
 
 def test_ArrayModel_offcenter():
