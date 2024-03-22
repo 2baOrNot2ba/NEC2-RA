@@ -542,7 +542,8 @@ class EEPdata:
         -------
         antspats: array
             The radiation patterns for all antennas.
-            The indices are [antnr, freqnr, thetanr, phinr, polnr].
+            The indices are [antnr, freqnr, thetanr, phinr, polnr]
+            polnr=0 is theta and polnr=1 is phi.
         """
         eep_list = self._get_embedded_elements()
         f_tht_mat = np.array([_nec.f_tht for _nec in eep_list])

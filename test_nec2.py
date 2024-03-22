@@ -188,12 +188,38 @@ def test_ArrayModel_offcenter():
     print(_relangs)
 
 
-def test_Array_2_lamhalfdip_sbys():
-    """
-    Test of two lambda/2 dipole side-by-side array
+def lamhalfdip():
+    lamhalf = 1.0
+    w_radii = 1e-5*2*lamhalf
+    dip_len = lamhalf
+    p1 = (0., 0., -dip_len/2)
+    p2 = (0., 0., +dip_len/2)
+    l12 = (p1, p2)
+    dip = StructureModel('lamhalfdip')
+    dip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    freq = 3e8/(2*lamhalf)
+    dip.segmentalize(65, freq/1e6)
+    return dip, freq
 
-    See Balanis Antenna Theory 2016, Fig 8.21
-    """
+
+def test_loaded_lamhalfdip():
+    dip, freq = lamhalfdip()
+    fs = FreqSteps('lin', 1, freq/1e6)  # MHz
+    rps = RadPatternSpec(nth=1, thets=90., nph=0, phis=0.)
+    ex_port = ('VS', VoltageSource(1.0))
+    eepdat_SC = dip.calc_eep_SC(ExecutionBlock(fs, [ex_port], rps))
+    Y_load =1.0*1./(78.2-45.7j)
+    eepdat_NO = eepdat_SC.transform_to('NO', adm_load=np.atleast_2d(Y_load))
+    eepdat_OC = eepdat_SC.transform_to('OC')
+    eel_loaded = eepdat_NO.get_EELs()
+    eeldat_OC =eepdat_OC.get_EELs()
+    print(eepdat_SC.get_impedances())
+    print('EEL 50 Ohms', 3e8/freq/np.pi, np.abs(eeldat_OC.eels[0].f_tht).item())
+    print('EEL 50 Ohms', np.abs(eel_loaded.eels[0].f_tht).item())
+    print(377*Y_load*(np.abs(eel_loaded.eels[0].f_tht).item())**2)
+
+
+def two_lamhalfdip():
     lamhalf = 1.0
     w_radii = 1e-5*2*lamhalf
     dip_len = lamhalf
@@ -202,11 +228,25 @@ def test_Array_2_lamhalfdip_sbys():
     l12 = (p1, p2)
     twodip = ArrayModel('2dip_sbs')
     twodip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    return twodip
+
+
+def test_Array_2_lamhalfdip_sbys():
+    """
+    Test of two lambda/2 dipole side-by-side array
+
+    See Balanis Antenna Theory 2016, Fig 8.21
+    """
+    # Use function to build model of lambda half dipole
+    twodip = two_lamhalfdip()
+    # Get the port name...
+    _dipgrpname = list(twodip.groups.keys()).pop()
+    portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
+    # ...and the length of the dipole
+    lamhalf = twodip[_dipgrpname].total_length()
     fs = FreqSteps('lin', 1, 3e8/(2*lamhalf)/1e6)  # MHz
-    print("Freq", fs.start, 'MHz')
-    # rps = None  # RadPatternSpec()
     twodip.segmentalize(65, fs.max_freq())
-    ex_port = ('VS', VoltageSource(1.0))
+    ex_port = (portname, VoltageSource(1.0))
     dists = 2*lamhalf * np.linspace(0.0, 3., 50)[1:]
     mutimp = []
     for dist in dists:
@@ -217,6 +257,9 @@ def test_Array_2_lamhalfdip_sbys():
         impmat = eepdat.get_impedances()
         mutimp.append(impmat[0,0,1])
     mutimp = np.array(mutimp)
+    # Get wire radius
+    _partname = list(twodip[_dipgrpname].parts.keys()).pop()
+    w_radii = twodip[_dipgrpname][_partname].thickness
     plt.plot(dists/(2*lamhalf), np.real(mutimp))
     plt.plot(dists/(2*lamhalf), np.imag(mutimp))
     plt.legend(['Resistive','Reactive'])
@@ -227,6 +270,37 @@ def test_Array_2_lamhalfdip_sbys():
               f'(wire radius={w_radii/(2*lamhalf)} lambda)')
     plt.show()
 
+def test_get_antspats():
+    """
+    Test of getting the antenna patterns tensor from an EEPdat object
+    """
+    # Use function to build model of lambda half dipole
+    twodip = two_lamhalfdip()
+    # Get the port name...
+    _dipgrpname = list(twodip.groups.keys()).pop()
+    portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
+    # ...and the length of the dipole
+    lamhalf = twodip[_dipgrpname].total_length()
+    fs = FreqSteps('lin', 1, 3e8/(2*lamhalf)/1e6)  # MHz
+    nph=36
+    rps = RadPatternSpec(nth=1, thets=90., nph=nph, phis=0., dph=360/nph)
+    twodip.segmentalize(65, fs.max_freq())
+    ex_port = (portname, VoltageSource(1.0))
+    arr_pos = [[0.,0.,0.], [lamhalf,0.,0.]]
+    twodip.arrayify(element=['dip'],
+                        array_positions=arr_pos)
+    eepdat = twodip.calc_eeps_SC(ExecutionBlock(fs, ex_port, rps))
+    antspats_arr = eepdat.get_antspats_arr()
+    ant_nr = 0
+    frq_nr = 0
+    theta_nr = 0
+    polcomps = {'theta':0, 'phi':1}
+    polcomp = 'theta'
+    plt.plot(np.abs(antspats_arr[ant_nr,frq_nr,theta_nr,:,polcomps[polcomp]]))
+    plt.title('Rad pattern, XY plane cut, Two dipoles')
+    plt.legend([f'abs(E_{polcomp})'])
+    plt.show()
+
 
 test_Deck()
 test_Deck_load_necfile()
@@ -235,5 +309,7 @@ test_StructureModel()
 test_EEL()
 test_SC_OC_transforms()
 test_ArrayModel_offcenter()
+#test_loaded_lamhalfdip()
 test_Array_2_lamhalfdip_sbys()
+test_get_antspats()
 
