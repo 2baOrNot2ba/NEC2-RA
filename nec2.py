@@ -520,6 +520,13 @@ class EEPdata:
         self.adm_or_imp = adm_or_imp  # admittance if SC, impedance if OC
 
     def get_admittances(self):
+        """\
+        Return the array's admittances
+
+        Returns
+        -------
+        Admittances has shape (nfrq, nths, nphs, nant, nant)
+        """
         if self.excite_typ == 'SC':
             return self.admittances
         elif self.excite_typ == 'OC':
@@ -575,7 +582,7 @@ class EEPdata:
             adm_or_imp = self.impedances
             adm_or_imp_load = self.imp_load
         freqs = self.eeps[0].freqs
-        freqs = np.array(freqs)[:, np.newaxis, np.newaxis]  # Broadcast
+        freqs = np.array(freqs)[:, np.newaxis, np.newaxis, np.newaxis]  # Brdcst
         # Template EELdata initialized with self.eeps which get overwritten
         # after tranformated eeps are calculated.
         # Also need to copy epps and adm_or_imp so return obj can be modified
@@ -585,9 +592,9 @@ class EEPdata:
         antspats = self.get_antspats_arr()
         antspats = 2.j/(MU0*freqs*1e6*excite_val)*antspats  # 1e6 = MHz to Hz
         if self.excite_typ == 'TH':
-            antspats = np.expand_dims(np.moveaxis(antspats, [0],[-1]), -1)
+            antspats = np.expand_dims(np.moveaxis(antspats, [0], [-1]), -1)
             antspats = adm_or_imp_load @ antspats
-            antspats = np.moveaxis(antspats.squeeze(-1),[-1],[0])
+            antspats = np.moveaxis(antspats.squeeze(-1), [-1], [0])
         eeldata.set_antspat_arr(antspats)
         return eeldata
     
@@ -599,7 +606,7 @@ class EEPdata:
             if eep != other_eeps[antnr]:
                 return False
         return True
-            
+
 
 class EEP_SC(EEPdata):
     def __init__(self, eep_sc, admittances_arr, voltage_excite=1.0):
@@ -612,27 +619,40 @@ class EEP_SC(EEPdata):
                      adm_load=None):
         if excite_typ == self.excite_typ:
             return deepcopy(self)
+        # _ee is placeholder var: gets overwritten before returning when
+        # method .set_antspats_arr() is called
         _ee = deepcopy(self._get_embedded_elements())
-        adm_arr = np.copy(self.get_admittances())
-        imp_arr = np.copy(self.get_impedances())
-        if adm_load is None and imp_load is not None:
-            adm_load = np.linalg.inv(imp_load)
-        antspat_SC = self.get_antspats_arr()
-        antspat_SC = np.expand_dims(np.moveaxis(antspat_SC, [0],[-1]), -1)
+        imp_arr = self.get_impedances()
+        ap_SC = self.get_antspats_arr()
+        # Note: antspats arr shape = (nrant, nrfreq, nrtheta, nrphi, nrpol)
+        #       so ant-axis (0) should be moved to end and the end extended
+        #       by one dimension so that it appears as stack of column vectors:
+        #           antspat_SC[freq,theta,phi,pol, ants, 1] ...
+        ap_SC = np.expand_dims(np.moveaxis(ap_SC, [0], [-1]), -1)
+        # Normalize antspats_SC with excite voltages and current:
+        ap_SC_0 = ap_SC * excite_val / self.voltage_excite
         if excite_typ == 'OC':
-            eepdat_tr = EEP_OC(_ee, imp_arr, excite_val)
+            eepdat_tr = EEP_OC(_ee, np.copy(imp_arr), excite_val)
+        #       ... so it can be matmul (@) with e.g.
+        #           imp_arr[freqs, np.newaxis, newaxis, np.newaxis, ants, ants]
+        #       after expanding the axes 1,2,3:
+            _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
+
             # Warnick2021 eq. 7
-            antspat_tr = imp_arr @ antspat_SC
-        elif excite_typ == 'TH':
-            imp_load = np.copy(imp_load)
-            eepdat_tr = EEP_TH(_ee, imp_arr, imp_load, excite_val)
-            # Warnick2021 eqs
-            antspat_tr = np.linalg.inv(adm_load + adm_arr) @ antspat_SC
+            antspat_tr = _imp_arr_ext @ ap_SC_0
+
         elif excite_typ == 'NO':
-            eepdat_tr = EEP_NO(_ee, adm_arr, adm_load, excite_val)
-            # Carozzi2024 eq. 5
-            antspat_tr = np.linalg.inv(adm_load + adm_arr) @ antspat_SC
-        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1),[-1],[0])
+            if adm_load is None and imp_load is not None:
+                adm_load = np.linalg.inv(imp_load)
+            adm_arr = self.get_admittances()
+            # Create new EEP_NO object to hold results to be return:ed
+            eepdat_tr = EEP_NO(_ee, np.copy(adm_arr), adm_load, excite_val)
+            _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
+
+            # Warnick2021 eq. 6
+            antspat_tr = np.linalg.inv(adm_load + _adm_arr_ext) @ ap_SC_0
+
+        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
         eepdat_tr.set_antspat_arr(antspat_tr)
         return eepdat_tr
 
@@ -648,21 +668,28 @@ class EEP_OC(EEPdata):
         if excite_typ == self.excite_typ:
             return deepcopy(self)
         _ee = deepcopy(self._get_embedded_elements())
-        antspat_OC = self.get_antspats_arr()
-        antspat_OC = np.expand_dims(np.moveaxis(antspat_OC, [0],[-1]), -1)
+        ap_OC = self.get_antspats_arr()
+        ap_OC = np.expand_dims(np.moveaxis(ap_OC, [0], [-1]), -1)
+        ap_OC_0 = ap_OC * excite_val / self.current_excite
         if excite_typ == 'SC':
             adm_arr = np.copy(self.get_admittances())
             eepdat_tr = EEP_SC(_ee, adm_arr, excite_val)
+            _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
+
             # Warnick2021 eq. 7
-            antspat_tr = adm_arr @ antspat_OC
+            antspat_tr = _adm_arr_ext @ ap_OC_0
+
         elif excite_typ == 'TH':
             imp_arr = np.copy(self.get_impedances())
             eepdat_tr = EEP_TH(_ee, imp_arr, imp_load, excite_val)
+            _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
+
             # Warnick2021 eq. 4
-            antspat_tr = imp_load @ np.linalg(imp_load+imp_arr) @ antspat_OC
+            antspat_tr = np.linalg.inv(imp_load + _imp_arr_ext) @ ap_OC_0
+
         elif excite_typ == 'NO':
-            pass
-        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1),[-1],[0])
+            raise NotImplementedError('Transform from OC -> NO not implemented')
+        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
         eepdat_tr.set_antspat_arr(antspat_tr)
         return eepdat_tr
 
@@ -680,19 +707,21 @@ class EEP_NO(EEPdata):
             return deepcopy(self)
         _ee = deepcopy(self._get_embedded_elements())
         adm_arr = self.get_admittances()
-        #imp_arr = self.get_impedances()
-        #imp_load = np.linalg.inv(self.adm_load)
-        antspat_NO = self.get_antspats_arr()
-        antspat_NO = np.expand_dims(np.moveaxis(antspat_NO [0],[-1]), -1)
+        ap_NO = self.get_antspats_arr()
+        ap_NO = np.expand_dims(np.moveaxis(ap_NO [0], [-1]), -1)
+        ap_NO_0 = ap_NO * excite_val / self.current_excite
         if excite_typ == 'SC':
-            eepdat_tr = EEP_SC(self._ee, adm_arr, excite_val)
+            eepdat_tr = EEP_SC(_ee, np.copy(adm_arr), excite_val)
+            _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
+
             # Warnick2021 eq. 6
-            antspat_tr = np.linalg.inv(self.adm_load + adm_arr) @ antspat_NO
+            antspat_tr = np.linalg.inv(self.adm_load + _adm_arr_ext) @ ap_NO_0
+
         elif excite_typ == 'OC':
-            pass
+            raise NotImplementedError('Transform from NO -> OC not implemented')
         elif excite_typ == 'TH':
-            pass
-        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1),[-1],[0])
+            raise NotImplementedError('Transform from NO -> TH not implemented')
+        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
         eepdat_tr.set_antspat_arr(antspat_tr)
         return eepdat_tr
 
@@ -707,23 +736,24 @@ class EEP_TH(EEPdata):
 
     def transform_to(self, excite_typ, excite_val=1.):
         if excite_typ == self.excite_typ:
-            return self
-        adm_arr = np.copy(self.get_admittances())
-        adm_load = np.linalg.inv(self.imp_load)
-        antspat_TH = self.get_antspats_arr()
-        antspat_TH = np.expand_dims(np.moveaxis(antspat_TH, [0],[-1]), -1)
+            return deepcopy(self)
+        _ee = deepcopy(self._get_embedded_elements())
+        imp_arr = self.impedances
+        ap_TH = self.get_antspats_arr()
+        ap_TH = np.expand_dims(np.moveaxis(ap_TH, [0], [-1]), -1)
+        ap_TH_0 = ap_TH * excite_val / self.current_excite
         if excite_typ == 'SC':
-            eepdat_tr = EEP_SC(self._get_embedded_elements(), adm_arr,
-                               excite_val)
-            # Warnick2021 eqs
-            antspat_tr = (adm_load + adm_arr) @ antspat_TH
+            raise NotImplementedError('Transform from TH -> SC not implemented')
         elif excite_typ == 'OC':
-            imp_arr = np.copy(self.get_impedances())
-            eepdat_tr = EEP_OC(self._get_embedded_elements(), adm_arr,
-                               excite_val)
+            eepdat_tr = EEP_OC(_ee, np.copy(imp_arr), excite_val)
+            _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
+
             # Warnick2021 eq. 4
-            antspat_tr = (self.imp_load + imp_arr) @ adm_load @ antspat_TH
-        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1),[-1],[0])
+            antspat_tr = (self.imp_load + _imp_arr_ext) @ ap_TH_0
+
+        elif excite_typ == 'NO':
+            raise NotImplementedError('Transform from TH -> NO not implemented')
+        antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
         eepdat_tr.set_antspat_arr(antspat_tr)
         return eepdat_tr
     
