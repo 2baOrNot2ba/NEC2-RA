@@ -509,7 +509,9 @@ class StructureCurrents:
 
 class EEPdata:
     """\
-    Super class for EEP_SC and EEP_OC
+    Class for Embedded Element Pattern data
+
+    Superclass to EEP_SC, EEP_OC, EEP_NO, EEP_TH and EEL
     """
     def __init__(self, eeps, adm_or_imp, excite_typ='SC', excite_val=1.0):
         self.eeps = eeps  # One NecOut (ie EEP) for each excitation (ie element)
@@ -527,15 +529,15 @@ class EEPdata:
         -------
         Admittances has shape (nfrq, nths, nphs, nant, nant)
         """
-        if self.excite_typ == 'SC':
+        if self.excite_typ == 'SC' or self.excite_typ == 'NO':
             return self.admittances
-        elif self.excite_typ == 'OC':
+        elif self.excite_typ == 'OC' or self.excite_typ == 'TH':
             return np.linalg.inv(self.impedances)  
     
     def get_impedances(self):
-        if self.excite_typ == 'OC':
+        if self.excite_typ == 'OC' or self.excite_typ == 'TH':
             return self.impedances
-        elif self.excite_typ == 'SC':
+        elif self.excite_typ == 'SC' or self.excite_typ == 'NO':
             return np.linalg.inv(self.admittances)
 
     def _get_embedded_elements(self):
@@ -587,7 +589,13 @@ class EEPdata:
         # after tranformated eeps are calculated.
         # Also need to copy epps and adm_or_imp so return obj can be modified
         # independently of self.
-        eeldata = EELdata(deepcopy(self.eeps), np.copy(adm_or_imp),
+        _ees = deepcopy(self.eeps)
+        for _ee in _ees:
+            if self.excite_typ == 'OC' or self.excite_typ == 'NO':
+                _ee.f_type = 'Length'
+            elif self.excite_typ == 'SC' or self.excite_typ == 'TH':
+                _ee.f_type = 'Length/Impedance'
+        eeldata = EELdata(_ees, np.copy(adm_or_imp),
                           self.excite_typ) 
         antspats = self.get_antspats_arr()
         antspats = 2.j/(MU0*freqs*1e6*excite_val)*antspats  # 1e6 = MHz to Hz
