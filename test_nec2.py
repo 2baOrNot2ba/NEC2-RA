@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from nec2 import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
                   FreqSteps, ExecutionBlock, RadPatternSpec)
 
+np.set_printoptions(threshold=sys.maxsize)
 
 def test_Deck():
     """\
@@ -125,11 +126,14 @@ def test_EEL():
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, [ex_port], rps)
     eepdat = abradip.calc_eep_SC(eb, True)
+    eeldat_OC = eepdat.transform_to('OC').get_EELs()
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
     efflen_theory = abradip['dip']['Z'].length()/2.0
     efflen_simult = Hsc_abs*np.abs(eeldat.eels[0].inp_Z)
+
+    print(eeldat_OC.eels[0].f_tht, np.abs(eeldat.eels[0].inp_Z))
     print('Effective length for Abraham dipole...',
           'Simulated:', np.ndarray.item(efflen_simult),
           'Theory:', efflen_theory)
@@ -309,7 +313,7 @@ test_StructureModel()
 test_EEL()
 test_SC_OC_transforms()
 test_ArrayModel_offcenter()
-#test_loaded_lamhalfdip()
+test_loaded_lamhalfdip()
 test_Array_2_lamhalfdip_sbys()
 test_get_antspats()
 
