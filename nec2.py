@@ -565,6 +565,23 @@ class EEPdata:
             _eep.f_tht = antspat[antnr, ..., 0]
             _eep.f_phi = antspat[antnr, ..., 1]
 
+    def get_pow_arr(self):
+        if self.excite_typ == 'SC':
+            _volt_exc = self.voltage_excite
+            _adm = self.admittances
+            # Warnick2021 eq. 14
+            pow_mat = np.abs(_volt_exc)**2*np.real(_adm)/2.
+        elif self.excite_typ == 'OC':
+            _curr_exc = self.current_excite
+            _imp = self.impedances
+            # Warncik2021 eq. 13 (with no loss)
+            pow_mat = np.abs(_curr_exc)**2*np.real(_imp)/2.
+        else:
+            raise NotImplementedError(
+                'Array power not implemented for cicuit type {}'
+                .format(self.excite_typ))
+        return pow_mat
+
     def get_EELs(self):
         """\
         Calculate Embedded Element Lengths from EEPs
