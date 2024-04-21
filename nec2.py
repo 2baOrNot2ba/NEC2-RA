@@ -152,6 +152,9 @@ class Deck:
                     _code_section.append(
                         f"_nec_context.geometry_complete{parms}")
             if mn_id in CARDS_CNTRL:
+                if mn_id == 'EK':
+                    _code_section.append(
+                        "_nec_context.set_extended_thin_wire_kernel(True)")
                 if mn_id == 'EX':
                     itmp3, itmp4 = self._split_digits(parms[3], 2)
                     _arg = (parms[:3]+(itmp3, itmp4)+parms[4:])
@@ -461,6 +464,7 @@ class ExecutionBlock:
     freqsteps: FreqSteps = FreqSteps()  # Should at least have this
     exciteports: typing.List = None
     radpat: RadPatternSpec = None
+    ext_thinwire: bool = False
 
     def nrexcitedports(self):
         return len(self.exciteports)
@@ -913,7 +917,7 @@ class StructureModel:
         self.comments.append(comment)
 
     def set_ground(self, grnd=Ground(1, 0, 0, 0)):
-        self.ground = grnd    
+        self.ground = grnd
 
     def _assign_tags_base(self, exclude_groups=None):
         """\
@@ -1106,6 +1110,10 @@ class StructureModel:
             _freqsteps = _exblk.freqsteps
             _exciteports = _exblk.exciteports
             _radpat = _exblk.radpat
+
+            # Extended Thin-Wire Kernel option?
+            if _exblk.ext_thinwire:
+                d.append_card('EK', 1)
 
             if _freqsteps:
             # Frequency
