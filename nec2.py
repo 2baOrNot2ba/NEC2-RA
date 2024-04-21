@@ -1358,7 +1358,8 @@ class ArrayModel(StructureModel):
         sc = StructureCurrents(freqs, nr_ants)
         for antnr in range(nr_ants):
             _prt_exc = ((antnr, _exciteport_name), _vltsrc)
-            _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat)
+            _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat,
+                                 ext_thinwire=eep_eb.ext_thinwire)
             _necout, nec_context = super().get_necout(_xb, save_necfile,
                                                       eb_id_suffix=str(antnr))
             _eep_sc.append(_necout)
