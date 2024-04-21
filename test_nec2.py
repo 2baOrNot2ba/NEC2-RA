@@ -263,7 +263,7 @@ def test_Array_2_lamhalfdip_sbys():
     mutimp = np.array(mutimp)
     # Get wire radius
     _partname = list(twodip[_dipgrpname].parts.keys()).pop()
-    w_radii = twodip[_dipgrpname][_partname].thickness
+    w_radii = twodip[_dipgrpname][_partname].radius
     plt.plot(dists/(2*lamhalf), np.real(mutimp))
     plt.plot(dists/(2*lamhalf), np.imag(mutimp))
     plt.legend(['Resistive','Reactive'])

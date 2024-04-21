@@ -328,7 +328,7 @@ class Port:
 class Wire:
     point_src: typing.Tuple
     point_dst: typing.Tuple
-    thickness: float
+    radius: float
     nr_seg: int = 0
     port: Port = None
 
@@ -992,7 +992,7 @@ class StructureModel:
                 if type(a_part) == Wire:
                     d.append_card('GW', tag_nr, nr_seg,
                             *a_part.point_src, *a_part.point_dst,
-                            a_part.thickness)
+                            a_part.radius)
 
     def create_geom_for_exclusive_groups(self, d, subgroup_ids):
         pass
