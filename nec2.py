@@ -949,6 +949,35 @@ class StructureModel:
         self._assign_tags_base()
         return max_nrseg
     
+    def seglamlens(self, freqsteps=None):
+        """Compute Segment Length in Units of lambda
+
+        Diagnostic to check segment lengths per wavelength.
+        Recommendations from https://www.nec2.org/part_3/secii.html
+        are to have segment length between 0.001 and 0.1 lambda
+        (i.e. between 10 to 1000 segs per lambda).
+
+        This method computes for all parts of the structure model over
+        all frequencies in the frequency execution or freqsteps passed
+        as argument.
+        """
+        if freqsteps == None:
+            try:
+                eblst = next(reversed(self.executionblocks.values()))
+                freqsteps = eblst.freqsteps
+            except:
+                raise RuntimeError('No freqsteps defined')
+        lams = 3e8/(1e6*np.asarray(freqsteps.aslist()))
+        lams_per_seg = {}
+        for gid, pid in self:
+            _part = self.groups[gid].parts[pid]
+            nr_seg_part = _part.nr_seg
+            len_part = _part.length()
+            segs_per_len = nr_seg_part/len_part
+            segs_per_lam = segs_per_len * lams
+            lams_per_seg[(gid,pid)] = 1 / segs_per_lam
+        return lams_per_seg
+    
     def _port_group(self, port_name):
         for gid in self.groups:
             if port_name in self.groups[gid].get_ports():
