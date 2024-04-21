@@ -978,6 +978,31 @@ class StructureModel:
             lams_per_seg[(gid,pid)] = 1 / segs_per_lam
         return lams_per_seg
     
+    def segthinness(self):
+        """Compute Segment Thinness
+
+        Diagnostic to see if thin-wire extension kernel is needed.
+        Recommendations from https://www.nec2.org/part_3/secii.html
+        are to have seglen/radius > 8, for thin-wire kernel option,
+        and seglen/radius < 2, for extended thin-wire kernel option.
+
+        Like seglamlens(), this method computes for all parts of the structure
+        model over all frequencies in the frequency execution or freqsteps
+        passed as argument.
+        """
+        lams_per_seg = self.seglamlens()
+        seg_thinness = {}
+        for gidpid in lams_per_seg:
+            gid, pid = gidpid
+            _part = self.groups[gid].parts[pid]
+            nr_seg_part = _part.nr_seg
+            len_part = _part.length()
+            seglen = len_part/nr_seg_part
+            a = _part.radius
+            thinness = seglen/a
+            seg_thinness[(gid,pid)] = thinness
+        return seg_thinness
+
     def _port_group(self, port_name):
         for gid in self.groups:
             if port_name in self.groups[gid].get_ports():
