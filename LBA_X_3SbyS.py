@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from nec2 import (ArrayModel, VoltageSource, FreqSteps, Wire,
+from nec2array import (ArrayModel, VoltageSource, FreqSteps, Wire,
                   ExecutionBlock, RadPatternSpec)
 
 np.set_printoptions(precision=4, linewidth=80)

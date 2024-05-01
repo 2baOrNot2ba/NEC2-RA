@@ -3,7 +3,7 @@ Recreate Figs 2 & 3 from Warnick2021
 """
 import matplotlib.pyplot as plt
 import numpy as np
-from nec2 import (ArrayModel, VoltageSource, FreqSteps, Wire,
+from nec2array import (ArrayModel, VoltageSource, FreqSteps, Wire,
                   ExecutionBlock, RadPatternSpec)
 
 #### Build array element antenna
