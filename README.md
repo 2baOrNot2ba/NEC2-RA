@@ -8,7 +8,6 @@ Documentation under development.
 ## Installation
 
 ```
-cd NEC2-RA
 git clone https://git.chalmers.se/tobia.carozzi/nec2-ra.git
 ```
 
