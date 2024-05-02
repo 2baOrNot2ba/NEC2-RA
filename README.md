@@ -8,17 +8,12 @@
 ## Installation
 
 ```
-cd existing_repo
-git remote add origin https://git.chalmers.se/tobia.carozzi/nec2array.git
-git branch -M main
-git push -uf origin main
+cd NEC2-RA
+git clone https://git.chalmers.se/tobia.carozzi/nec2-ra.git
 ```
 
-## Name
-Choose a self-explaining name for your project.
-
 ## Description
-
+The `NEC2-RA` project provides functionality for working with arrays of antennas using NEC2. 
 
 
 ## Usage
