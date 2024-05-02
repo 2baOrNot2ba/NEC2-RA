@@ -3,7 +3,7 @@
 `nec2array` is a python package for creating simple antenna arrays.
 
 ## Getting started
-
+Documentation under development.
 
 ## Installation
 
