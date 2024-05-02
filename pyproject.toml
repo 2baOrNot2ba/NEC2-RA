@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "NEC2-RA"
+version = "0.0.1"
+authors = [
+  { name="Tobia D. Carozzi", email="tobia.carozzi@chalmers.se" },
+]
+description = "Package to create antenna arrays with NEC2"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "PyNEC==1.7.3.4",
+]
+
+[tool.setuptools]
+py-modules = [
+    "nec2array",
+]
