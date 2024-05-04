@@ -559,9 +559,15 @@ class EEPdata:
             polnr=0 is theta and polnr=1 is phi.
         """
         eep_list = self._get_embedded_elements()
-        f_tht_mat = np.array([_nec.f_tht for _nec in eep_list])
-        f_phi_mat = np.array([_nec.f_phi for _nec in eep_list])
+        f_tht_mat = np.array([np.atleast_3d(_nec.f_tht) for _nec in eep_list])
+        f_phi_mat = np.array([np.atleast_3d(_nec.f_phi) for _nec in eep_list])
         antspats = np.stack((f_tht_mat, f_phi_mat), axis=-1)
+        if antspats.shape[-3] == 0:
+            # In the case that there is no radiation patterns,
+            # the atleast_3d() above makes the -2 axis shape 1,
+            # but here I force it to 0 to clearify that there is no theta, phis
+            antspats = antspats.reshape(
+                antspats.shape[:-3] + (0, 0, antspats.shape[-1]))
         return antspats
     
     def set_antspat_arr(self, antspat):
