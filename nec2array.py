@@ -1363,6 +1363,7 @@ class ArrayModel(StructureModel):
         _admittances = np.zeros((len(freqs), nr_ants, nr_ants), complex)
         sc = StructureCurrents(freqs, nr_ants)
         for antnr in range(nr_ants):
+            print(f'Exciting antenna {antnr}/{nr_ants}', end='\r', flush=True)
             _prt_exc = ((antnr, _exciteport_name), _vltsrc)
             _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat,
                                  ext_thinwire=eep_eb.ext_thinwire)
@@ -1392,6 +1393,7 @@ class ArrayModel(StructureModel):
                     cur_port = sc.get_current(ex_tag, ex_seg)
                     admittances_T.append(cur_port / port.source.value)
                 _admittances[f,:,antnr] = np.array(admittances_T)
+        print()
         results = EEP_SC(_eep_sc, _admittances, _vltsrc.value)
         return results
 
