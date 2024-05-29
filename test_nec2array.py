@@ -69,7 +69,6 @@ def test_Deck_exec_pynec():
         inp_parms = cntxt.get_input_parameters(f)
         print(inp_parms.get_impedance())
 
-
 def test_StructureModel():
     p1 = (+0.5, 0., 0.1)
     p2 = (+0.5, 0., 0.9)
@@ -96,6 +95,37 @@ def test_StructureModel():
         inp_parms = cntxt.get_input_parameters(f)
         for pnr, portname in enumerate(ex_ports):
             print(portname, inp_parms.get_impedance()[pnr])
+
+
+def test_manual_and_autosegment():
+    """\
+    Test of manual and autosegmentation
+    """
+    p1 = (0., 0., +0.5)
+    p2 = (0., 0.,  0.0)
+    p3 = (0., 0., -0.5)
+    l12 = (p1, p2)
+    l23 = (p2, p3)
+    wire_rad = 0.001
+    fs = FreqSteps('lin', 1, 150.)  # MHz
+    model = StructureModel('2partDip')
+    model['dip']['Z+'] = Wire(*l12, wire_rad)
+    model['dip']['Z-'] = Wire(*l23, wire_rad)
+    model['dip']['Z-'].add_port(0.0, 'VS')
+    eb = ExecutionBlock(None, [('VS', VoltageSource(1.0))])
+    #  Segmentalize manually
+    model['dip']['Z+'].nr_seg = 20
+    model['dip']['Z-'].nr_seg = 80
+    model.add_executionblock('exblk', eb)
+    # Converting to neccards assigns port seg nr
+    d = model.as_neccards()
+    print('Using manual segmentation '
+          'Excitation is on seg nr 21:', model['dip']['Z-'].port.ex_seg == 21)
+    segsperwavelen = 2*100
+    model.segmentalize(segsperwavelen, fs.max_freq())
+    d = model.as_neccards()
+    print(f'Using segmentalize() with {segsperwavelen/2} seg / lambda/2'
+          'Excitation is on seg nr 51:', model['dip']['Z-'].port.ex_seg==51)
 
 
 def sim_abraham_dip(freq):
@@ -134,7 +164,7 @@ def test_EEL():
     efflen_theory = abradip['dip']['Z'].length()/2.0
     efflen_simult = Hsc_abs*np.abs(eeldat.eels[0].inp_Z)
 
-    print(eeldat_OC.eels[0].f_tht, np.abs(eeldat.eels[0].inp_Z))
+    print(eeldat_OC.eels[0].f_tht, np.abs(eeldat.eels[0].inp_Z), Hsc_abs)
     print('Effective length for Abraham dipole...',
           'Simulated:', np.ndarray.item(efflen_simult),
           'Theory:', efflen_theory)
@@ -316,6 +346,7 @@ test_Deck()
 test_Deck_load_necfile()
 test_Deck_exec_pynec()
 test_StructureModel()
+test_manual_and_autosegment()
 test_EEL()
 test_SC_OC_transforms()
 test_ArrayModel_offcenter()
