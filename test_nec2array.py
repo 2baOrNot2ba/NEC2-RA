@@ -230,25 +230,30 @@ def lamhalfdip(rad_lam=None):
     else:
         w_radii = rad_lam * 2*lamhalf
     dip_len = lamhalf
-    p1 = (0., 0., -dip_len/2)
-    p2 = (0., 0., +dip_len/2)
+    p1 = (-dip_len/2, 0., 0.5)
+    p2 = (+dip_len/2, 0., 0.5)
     l12 = (p1, p2)
     dip = StructureModel('lamhalfdip')
-    dip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    dip['dip']['X'] = Wire(*l12, w_radii).add_port(0.5,'VS')
     freq = 3e8/(2*lamhalf)
     dip.segmentalize(65, freq/1e6)
     return dip, freq
 
 
 def test_loaded_lamhalfdip():
-    dip, freq = lamhalfdip(0.01)
+    """\
+    Test loading of fat dipole over ground (uses extended thin wire kernel)
+    """
+    dip_fat, freq = lamhalfdip(0.01)
+    dip_fat.set_ground()  # Default is a PEC ground in Z=0 plane.
     fs = FreqSteps('lin', 1, freq/1e6)  # MHz
     rps = RadPatternSpec(nth=1, thets=90., nph=0, phis=0.)
     ex_port = ('VS', VoltageSource(1.0))
-    eepdat_SC = dip.calc_eep_SC(ExecutionBlock(fs, [ex_port], rps,
-                                               ext_thinwire=True), save_necfile=True)
-    print("Diagnostics", dip.seglamlens(), dip.segthinness())
-    Y_load =1.0*1./(78.2-45.7j)
+    # Add "Extended Thin Wire kernel" to execution block
+    eb = ExecutionBlock(fs, [ex_port], rps, ext_thinwire=True)
+    eepdat_SC = dip_fat.calc_eep_SC(eb)
+    print("Diagnostics", dip_fat.seglamlens(), dip_fat.segthinness())
+    Y_load = 1.0*1./(78.2-45.7j)
     eepdat_NO = eepdat_SC.transform_to('NO', adm_load=np.atleast_2d(Y_load))
     eepdat_OC = eepdat_SC.transform_to('OC')
     eel_loaded = eepdat_NO.get_EELs()
