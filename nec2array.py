@@ -52,8 +52,9 @@ CARDDEFS = {
     'GD': {'PRGINP': 'PCNTRL',
            'F1': 'EPSR2', 'F2': 'SIG2', 'F3': 'CLT', 'F4': 'CHT'},
     'GN': {'PRGINP': 'PCNTRL',
-           'I1': 'IPERF', 'I2': 'NRADL', 'F1': 'EPSE', 'F2': 'SIG',
-           'F3': 'F3', 'F4': 'F4', 'F5': 'F5'},
+           'I1': 'IPERF', 'I2': 'NRADL', 'I3': 'BLANK', 'I4': 'BLANK',
+           'F1': 'EPSE', 'F2': 'SIG', 'F3': 'F3', 'F4': 'F4', 'F5': 'F5',
+           'F6': 'F6'},
     'KH': {'PRGINP': 'PCNTRL',
            'F1': 'RKH'},
     'LD': {'PRGINP': 'PCNTRL',
@@ -163,6 +164,9 @@ class Deck:
                     pass
                 if mn_id == 'FR':
                     _code_section.append(f"_nec_context.fr_card{parms}")
+                if mn_id == 'GN':
+                    parms = parms[:2] + parms[4:]  # Cols I3,I4 not used PyNEC
+                    _code_section.append(f"_nec_context.gn_card{parms}")
                 if mn_id == 'RP':
                     X, N, D, A = self._split_digits(parms[3], 4)
                     _arg = parms[:3]+(X, N, D, A)+parms[4:]
@@ -453,10 +457,11 @@ class Ground:
     f3: float = 0.
     f4: float = 0.
     f5: float = 0.
+    f6: float = 0.
 
     def astuple(self):
         return (self.iperf, self.nradl, 0, 0, self.epse, self.sig,
-                self.f3, self.f4, self.f5)
+                self.f3, self.f4, self.f5, self.f6)
 
 
 @dataclass
@@ -922,8 +927,9 @@ class StructureModel:
     def set_commentline(self, comment):
         self.comments.append(comment)
 
-    def set_ground(self, grnd=Ground(1, 0, 0, 0)):
-        self.ground = grnd
+    def set_ground(self, grnd=Ground(1, 0, 0, 0), gpflag=1):
+        if grnd is not None:
+            self.ground = {'gpflag': gpflag, 'grnd': grnd}
 
     def _assign_tags_base(self, exclude_groups=None):
         """\
@@ -1109,7 +1115,10 @@ class StructureModel:
         self.create_geom_for_exclusive_groups(d, exclude_groups)
 
         # End Geometry
-        d.append_card('GE', 0)
+        gpflag = 0
+        if self.ground:
+            gpflag = self.ground['gpflag']
+        d.append_card('GE', gpflag)
 
         # Program Control (loop over self.executionblocks)
         for _exblk in self.executionblocks.values():
@@ -1120,6 +1129,10 @@ class StructureModel:
             # Extended Thin-Wire Kernel option?
             if _exblk.ext_thinwire:
                 d.append_card('EK', 1)
+            
+            # Ground
+            if self.ground:
+                d.append_card('GN', *(self.ground['grnd'].astuple()))
 
             if _freqsteps:
             # Frequency
