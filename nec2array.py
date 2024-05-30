@@ -3,7 +3,7 @@ from dataclasses import dataclass, astuple
 import typing
 import pathlib
 import numpy as np
-#import PyNEC
+import warnings
 
 MU0 = 4*np.pi*1e-7  # H/m aka vacuum magnetic permeability
 
@@ -1070,6 +1070,7 @@ class StructureModel:
     def create_excite_for_groups(self, d, subgroup_ids, _exciteports):
         subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
         exciteportsdct = dict(_exciteports)
+        excited_ports_created = []
         for gid in subgroups:
             tag_nr = subgroups[gid]._tag_nr
             subgroups[gid]._assign_port_segs()
@@ -1078,6 +1079,7 @@ class StructureModel:
                 if not port.source:
                     if port.name not in exciteportsdct: continue
                     port.source = exciteportsdct[port.name]
+                excited_ports_created.append(portid)
                 ex_seg = port.ex_seg
                 ex_type = port.source.nec_type()
                 if ex_type == 0:
@@ -1091,6 +1093,7 @@ class StructureModel:
                     F1, F2 = voltage.real, voltage.imag
                 d.append_card('EX', ex_type, I2, I3, I4,
                                 F1, F2, 0., 0., 0., 0.)
+        return excited_ports_created
 
     def create_excite_for_exclusive_groups(self, d, _exciteports):
         pass
@@ -1142,9 +1145,11 @@ class StructureModel:
 
             # Excitations
             # ... non element group
-            self.create_excite_for_groups(d, nonelemgrp, _exciteports)
+            exciteports_grp = \
+                self.create_excite_for_groups(d, nonelemgrp, _exciteports)
             # ... element group
-            self.create_excite_for_exclusive_groups(d, _exciteports) ###
+            self.create_excite_for_exclusive_groups(d, _exciteports,
+                                                    exciteports_grp)
 
             # Cards that trigger execution of NEC2 engine 
             if _radpat:
@@ -1318,7 +1323,16 @@ class ArrayModel(StructureModel):
         super().create_geom_for_groups(d, subgroup_ids)
         self.create_array(d)
 
-    def create_excite_for_exclusive_groups(self, d, _exciteports):
+    def create_excite_for_exclusive_groups(self, d, _exciteports,
+                                           exciteports_grp):
+        # Check to see if non element groups are being excited
+        if exciteports_grp:
+            # This should probably be an exception but I can't
+            # tell if there may be some interesting use case so
+            # I leave it as a warning. 
+            warnings.warn(f"Non embedded ports {exciteports_grp} excited so "
+                          "ordinary embedded calculations will be incorrect. "
+                          "Remove all port excitation values in model.")
         _nonelem_ex_ports = []
         _elem_ex_ports = []
         self.reset_port_srcs()
