@@ -1052,7 +1052,7 @@ class StructureModel:
             self.executionblocks = {}
         self.executionblocks[name] = executionblock
     
-    def _create_geom_for_groups(self, d, subgroup_ids):
+    def _create_geom_groups(self, d, subgroup_ids):
         subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
         for gid in subgroups:
             for pid in subgroups[gid]:
@@ -1064,10 +1064,10 @@ class StructureModel:
                             *a_part.point_src, *a_part.point_dst,
                             a_part.radius)
 
-    def _create_geom_for_exclusive_groups(self, d, subgroup_ids):
+    def _create_geom_exclusive_groups(self, d, subgroup_ids):
         pass
 
-    def _create_excite_for_groups(self, d, subgroup_ids, _exciteports):
+    def _create_excite_groups(self, d, subgroup_ids, _exciteports):
         subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
         exciteportsdct = dict(_exciteports)
         excited_ports_created = []
@@ -1095,7 +1095,7 @@ class StructureModel:
                                 F1, F2, 0., 0., 0., 0.)
         return excited_ports_created
 
-    def _create_excite_for_exclusive_groups(self, d, _exciteports):
+    def _create_excite_exclusive_groups(self, d, _exciteports):
         pass
 
     def as_neccards(self, exclude_groups=None):
@@ -1112,10 +1112,10 @@ class StructureModel:
         nonelemgrp = set(self.groups)-set(exclude_groups)
 
         # Structure Geometry for non element groups
-        self._create_geom_for_groups(d, nonelemgrp)
+        self._create_geom_groups(d, nonelemgrp)
         # Structure Geometry for element groups
         # # Create initial group to move
-        self._create_geom_for_exclusive_groups(d, exclude_groups)
+        self._create_geom_exclusive_groups(d, exclude_groups)
 
         # End Geometry
         gpflag = 0
@@ -1146,9 +1146,9 @@ class StructureModel:
             # Excitations
             # ... non element group
             exciteports_grp = \
-                self._create_excite_for_groups(d, nonelemgrp, _exciteports)
+                self._create_excite_groups(d, nonelemgrp, _exciteports)
             # ... element group
-            self._create_excite_for_exclusive_groups(d, _exciteports,
+            self._create_excite_exclusive_groups(d, _exciteports,
                                                     exciteports_grp)
 
             # Cards that trigger execution of NEC2 engine 
@@ -1319,12 +1319,12 @@ class ArrayModel(StructureModel):
                             dpos[0], dpos[1], dpos[2], elem_tags_start)
             elem_tags_start += nr_elem_tags
 
-    def _create_geom_for_exclusive_groups(self, d, subgroup_ids):
-        super()._create_geom_for_groups(d, subgroup_ids)
+    def _create_geom_exclusive_groups(self, d, subgroup_ids):
+        super()._create_geom_groups(d, subgroup_ids)
         self.create_array(d)
 
-    def _create_excite_for_exclusive_groups(self, d, _exciteports,
-                                           exciteports_grp):
+    def _create_excite_exclusive_groups(self, d, _exciteports,
+                                        exciteports_grp):
         # Check to see if non element groups are being excited
         if exciteports_grp:
             # This should probably be an exception but I can't
