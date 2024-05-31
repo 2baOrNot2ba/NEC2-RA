@@ -1367,14 +1367,21 @@ class ArrayModel(StructureModel):
     def as_neccards(self):
         return super().as_neccards(exclude_groups=self.element)
 
-    def calc_eeps_SC(self, eep_eb, save_necfile=False, print_prog=False):
+    def excite_1by1(self, eep_eb, save_necfile=False, print_prog=False):
         """\
-        Calculate embedded element patterns (EEPs) for array
+        Excite elements one at a time to obtain embedded element properties
+
+        This method excites one element in the array at a time, leaving all
+        other non-excited elements with their nominal loading.
+        Since NEC2 is a MOM code, the excitation should be a voltage over
+        a conducting segment, and this makes the EE procedure a short-cicuit
+        EE excitation and the patterns will be the SC EEPs.
         
         Parameters
         ----------
         eep_eb : ExecutionBlock
-            The execution block to used to compute the EEPs
+            The execution block to used to compute the EEPs. Should have at
+            least one excited port with an arbitary voltage value.
         save_nec : bool
             Save as a NEC file
         print_prog : bool
@@ -1384,7 +1391,7 @@ class ArrayModel(StructureModel):
         Returns
         -------
         results : EEPdata
-            The EEP data.
+            The EEP data, or specifically a EEP_SC() object.
         """
         _frq_cntr_step = eep_eb.freqsteps
         freqs = _frq_cntr_step.aslist()

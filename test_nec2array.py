@@ -210,7 +210,7 @@ def test_ArrayModel_offcenter():
     arr_pos = [[10., 21., 15.]]
     offcnt.arrayify(element=['dip'], array_positions=arr_pos)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = offcnt.calc_eeps_SC(eb, save_necfile=True)
+    eepdat = offcnt.excite_1by1(eb, save_necfile=True)
     sv = offcnt.calc_steering_vector(eb)
     ant_nr = 0
     frq_nr = 0
@@ -298,7 +298,7 @@ def test_Array_2_lamhalfdip_sbys():
         arr_pos = [[0.,0.,0.], [dist, 0., 0.]]
         twodip.arrayify(element=['dip'],
                         array_positions=arr_pos)
-        eepdat = twodip.calc_eeps_SC(ExecutionBlock(fs, ex_port))
+        eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port))
         impmat = eepdat.get_impedances()
         mutimp.append(impmat[0,0,1])
     mutimp = np.array(mutimp)
@@ -334,7 +334,7 @@ def test_get_antspats():
     arr_pos = [[0.,0.,0.], [lamhalf,0.,0.]]
     twodip.arrayify(element=['dip'],
                         array_positions=arr_pos)
-    eepdat = twodip.calc_eeps_SC(ExecutionBlock(fs, ex_port, rps))
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
     antspats_arr = eepdat.get_antspats_arr()
     ant_nr = 0
     frq_nr = 0
