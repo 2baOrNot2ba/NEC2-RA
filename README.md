@@ -1,33 +1,27 @@
-# NEC2array
+# NEC2-RA
 
-`NEC2array` is a python package for creating simple antenna arrays.
+`nec2array` is a python package for creating simple antenna arrays.
 
 ## Getting started
-
+Documentation under development.
 
 ## Installation
 
 ```
-cd existing_repo
-git remote add origin https://git.chalmers.se/tobia.carozzi/nec2array.git
-git branch -M main
-git push -uf origin main
+git clone https://git.chalmers.se/tobia.carozzi/nec2-ra.git
 ```
 
-## Name
-Choose a self-explaining name for your project.
-
 ## Description
-
+The `NEC2-RA` project provides functionality for working with arrays of antennas using NEC2. 
 
 
 ## Usage
 
 ## Authors and acknowledgment
-Tobia Carozzi
+Tobia D. Carozzi
 
 ## License
 This project is open source, and has an MIT license.
 
 ## Project status
-`NEC2array` is still in developement, and probably a lot of bugs.
+`nec2array` is still in developement.

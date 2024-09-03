@@ -3,7 +3,7 @@ Recreate Figs 2 & 3 from Warnick2021
 """
 import matplotlib.pyplot as plt
 import numpy as np
-from nec2 import (ArrayModel, VoltageSource, FreqSteps, Wire,
+from nec2array import (ArrayModel, VoltageSource, FreqSteps, Wire,
                   ExecutionBlock, RadPatternSpec)
 
 #### Build array element antenna
@@ -48,7 +48,7 @@ for spfac in spacefacs:
     d = spfac*lambda_
     arr_pos =[[antnr*d-(nr_ants-1)/2*d, 0., 0.] for antnr in range(nr_ants)]
     warnick6.arrayify(element=['ant_Z'], array_positions=arr_pos)
-    eepSCdat = warnick6.calc_eeps_SC(eb_arr)
+    eepSCdat = warnick6.excite_1by1(eb_arr)
     pow_act_SC = eepSCdat.get_pow_arr()[frq_idx, ref_ant, ref_ant]
     pows_act_SC.append(pow_act_SC)
     # Get OC from SC through transformation:

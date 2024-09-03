@@ -3,7 +3,7 @@ from dataclasses import dataclass, astuple
 import typing
 import pathlib
 import numpy as np
-#import PyNEC
+import warnings
 
 MU0 = 4*np.pi*1e-7  # H/m aka vacuum magnetic permeability
 
@@ -52,8 +52,9 @@ CARDDEFS = {
     'GD': {'PRGINP': 'PCNTRL',
            'F1': 'EPSR2', 'F2': 'SIG2', 'F3': 'CLT', 'F4': 'CHT'},
     'GN': {'PRGINP': 'PCNTRL',
-           'I1': 'IPERF', 'I2': 'NRADL', 'F1': 'EPSE', 'F2': 'SIG',
-           'F3': 'F3', 'F4': 'F4', 'F5': 'F5'},
+           'I1': 'IPERF', 'I2': 'NRADL', 'I3': 'BLANK', 'I4': 'BLANK',
+           'F1': 'EPSE', 'F2': 'SIG', 'F3': 'F3', 'F4': 'F4', 'F5': 'F5',
+           'F6': 'F6'},
     'KH': {'PRGINP': 'PCNTRL',
            'F1': 'RKH'},
     'LD': {'PRGINP': 'PCNTRL',
@@ -152,6 +153,9 @@ class Deck:
                     _code_section.append(
                         f"_nec_context.geometry_complete{parms}")
             if mn_id in CARDS_CNTRL:
+                if mn_id == 'EK':
+                    _code_section.append(
+                        "_nec_context.set_extended_thin_wire_kernel(True)")
                 if mn_id == 'EX':
                     itmp3, itmp4 = self._split_digits(parms[3], 2)
                     _arg = (parms[:3]+(itmp3, itmp4)+parms[4:])
@@ -160,6 +164,9 @@ class Deck:
                     pass
                 if mn_id == 'FR':
                     _code_section.append(f"_nec_context.fr_card{parms}")
+                if mn_id == 'GN':
+                    parms = parms[:2] + parms[4:]  # Cols I3,I4 not used PyNEC
+                    _code_section.append(f"_nec_context.gn_card{parms}")
                 if mn_id == 'RP':
                     X, N, D, A = self._split_digits(parms[3], 4)
                     _arg = parms[:3]+(X, N, D, A)+parms[4:]
@@ -328,7 +335,7 @@ class Port:
 class Wire:
     point_src: typing.Tuple
     point_dst: typing.Tuple
-    thickness: float
+    radius: float
     nr_seg: int = 0
     port: Port = None
 
@@ -450,10 +457,11 @@ class Ground:
     f3: float = 0.
     f4: float = 0.
     f5: float = 0.
+    f6: float = 0.
 
     def astuple(self):
         return (self.iperf, self.nradl, 0, 0, self.epse, self.sig,
-                self.f3, self.f4, self.f5)
+                self.f3, self.f4, self.f5, self.f6)
 
 
 @dataclass
@@ -461,6 +469,7 @@ class ExecutionBlock:
     freqsteps: FreqSteps = FreqSteps()  # Should at least have this
     exciteports: typing.List = None
     radpat: RadPatternSpec = None
+    ext_thinwire: bool = False
 
     def nrexcitedports(self):
         return len(self.exciteports)
@@ -555,9 +564,15 @@ class EEPdata:
             polnr=0 is theta and polnr=1 is phi.
         """
         eep_list = self._get_embedded_elements()
-        f_tht_mat = np.array([_nec.f_tht for _nec in eep_list])
-        f_phi_mat = np.array([_nec.f_phi for _nec in eep_list])
+        f_tht_mat = np.array([np.atleast_3d(_nec.f_tht) for _nec in eep_list])
+        f_phi_mat = np.array([np.atleast_3d(_nec.f_phi) for _nec in eep_list])
         antspats = np.stack((f_tht_mat, f_phi_mat), axis=-1)
+        if antspats.shape[-3] == 0:
+            # In the case that there is no radiation patterns,
+            # the atleast_3d() above makes the -2 axis shape 1,
+            # but here I force it to 0 to clearify that there is no theta, phis
+            antspats = antspats.reshape(
+                antspats.shape[:-3] + (0, 0, antspats.shape[-1]))
         return antspats
     
     def set_antspat_arr(self, antspat):
@@ -912,8 +927,9 @@ class StructureModel:
     def set_commentline(self, comment):
         self.comments.append(comment)
 
-    def set_ground(self, grnd=Ground(1, 0, 0, 0)):
-        self.ground = grnd    
+    def set_ground(self, grnd=Ground(1, 0, 0, 0), gpflag=1):
+        if grnd is not None:
+            self.ground = {'gpflag': gpflag, 'grnd': grnd}
 
     def _assign_tags_base(self, exclude_groups=None):
         """\
@@ -949,6 +965,60 @@ class StructureModel:
         self._assign_tags_base()
         return max_nrseg
     
+    def seglamlens(self, freqsteps=None):
+        """Compute Segment Length in Units of lambda
+
+        Diagnostic to check segment lengths per wavelength.
+        Recommendations from https://www.nec2.org/part_3/secii.html
+        are to have segment length between 0.001 and 0.1 lambda
+        (i.e. between 10 to 1000 segs per lambda).
+
+        This method computes for all parts of the structure model over
+        all frequencies in the frequency execution or freqsteps passed
+        as argument.
+        """
+        if freqsteps == None:
+            try:
+                eblst = next(reversed(self.executionblocks.values()))
+                freqsteps = eblst.freqsteps
+            except:
+                raise RuntimeError('No freqsteps defined')
+        lams = 3e8/(1e6*np.asarray(freqsteps.aslist()))
+        lams_per_seg = {}
+        for gid, pid in self:
+            _part = self.groups[gid].parts[pid]
+            nr_seg_part = _part.nr_seg
+            len_part = _part.length()
+            segs_per_len = nr_seg_part/len_part
+            segs_per_lam = segs_per_len * lams
+            lams_per_seg[(gid,pid)] = 1 / segs_per_lam
+        return lams_per_seg
+    
+    def segthinness(self):
+        """Compute Segment Thinness
+
+        Diagnostic to see if thin-wire extension kernel is needed.
+        Recommendations from https://www.nec2.org/part_3/secii.html
+        are to have seglen/radius > 8, for thin-wire kernel option,
+        and seglen/radius < 2, for extended thin-wire kernel option.
+
+        Like seglamlens(), this method computes for all parts of the structure
+        model over all frequencies in the frequency execution or freqsteps
+        passed as argument.
+        """
+        lams_per_seg = self.seglamlens()
+        seg_thinness = {}
+        for gidpid in lams_per_seg:
+            gid, pid = gidpid
+            _part = self.groups[gid].parts[pid]
+            nr_seg_part = _part.nr_seg
+            len_part = _part.length()
+            seglen = len_part/nr_seg_part
+            a = _part.radius
+            thinness = seglen/a
+            seg_thinness[(gid,pid)] = thinness
+        return seg_thinness
+
     def _port_group(self, port_name):
         for gid in self.groups:
             if port_name in self.groups[gid].get_ports():
@@ -982,7 +1052,7 @@ class StructureModel:
             self.executionblocks = {}
         self.executionblocks[name] = executionblock
     
-    def create_geom_for_groups(self, d, subgroup_ids):
+    def _create_geom_groups(self, d, subgroup_ids):
         subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
         for gid in subgroups:
             for pid in subgroups[gid]:
@@ -992,14 +1062,15 @@ class StructureModel:
                 if type(a_part) == Wire:
                     d.append_card('GW', tag_nr, nr_seg,
                             *a_part.point_src, *a_part.point_dst,
-                            a_part.thickness)
+                            a_part.radius)
 
-    def create_geom_for_exclusive_groups(self, d, subgroup_ids):
+    def _create_geom_exclusive_groups(self, d, subgroup_ids):
         pass
 
-    def create_excite_for_groups(self, d, subgroup_ids, _exciteports):
+    def _create_excite_groups(self, d, subgroup_ids, _exciteports):
         subgroups = {gid: self.groups[gid] for gid in subgroup_ids}
         exciteportsdct = dict(_exciteports)
+        excited_ports_created = []
         for gid in subgroups:
             tag_nr = subgroups[gid]._tag_nr
             subgroups[gid]._assign_port_segs()
@@ -1008,6 +1079,7 @@ class StructureModel:
                 if not port.source:
                     if port.name not in exciteportsdct: continue
                     port.source = exciteportsdct[port.name]
+                excited_ports_created.append(portid)
                 ex_seg = port.ex_seg
                 ex_type = port.source.nec_type()
                 if ex_type == 0:
@@ -1021,8 +1093,9 @@ class StructureModel:
                     F1, F2 = voltage.real, voltage.imag
                 d.append_card('EX', ex_type, I2, I3, I4,
                                 F1, F2, 0., 0., 0., 0.)
+        return excited_ports_created
 
-    def create_excite_for_exclusive_groups(self, d, _exciteports):
+    def _create_excite_exclusive_groups(self, d, _exciteports):
         pass
 
     def as_neccards(self, exclude_groups=None):
@@ -1039,19 +1112,30 @@ class StructureModel:
         nonelemgrp = set(self.groups)-set(exclude_groups)
 
         # Structure Geometry for non element groups
-        self.create_geom_for_groups(d, nonelemgrp)
+        self._create_geom_groups(d, nonelemgrp)
         # Structure Geometry for element groups
         # # Create initial group to move
-        self.create_geom_for_exclusive_groups(d, exclude_groups)
+        self._create_geom_exclusive_groups(d, exclude_groups)
 
         # End Geometry
-        d.append_card('GE', 0)
+        gpflag = 0
+        if self.ground:
+            gpflag = self.ground['gpflag']
+        d.append_card('GE', gpflag)
 
         # Program Control (loop over self.executionblocks)
         for _exblk in self.executionblocks.values():
             _freqsteps = _exblk.freqsteps
             _exciteports = _exblk.exciteports
             _radpat = _exblk.radpat
+
+            # Extended Thin-Wire Kernel option?
+            if _exblk.ext_thinwire:
+                d.append_card('EK', 1)
+            
+            # Ground
+            if self.ground:
+                d.append_card('GN', *(self.ground['grnd'].astuple()))
 
             if _freqsteps:
             # Frequency
@@ -1061,9 +1145,11 @@ class StructureModel:
 
             # Excitations
             # ... non element group
-            self.create_excite_for_groups(d, nonelemgrp, _exciteports)
+            exciteports_grp = \
+                self._create_excite_groups(d, nonelemgrp, _exciteports)
             # ... element group
-            self.create_excite_for_exclusive_groups(d, _exciteports) ###
+            self._create_excite_exclusive_groups(d, _exciteports,
+                                                    exciteports_grp)
 
             # Cards that trigger execution of NEC2 engine 
             if _radpat:
@@ -1233,11 +1319,20 @@ class ArrayModel(StructureModel):
                             dpos[0], dpos[1], dpos[2], elem_tags_start)
             elem_tags_start += nr_elem_tags
 
-    def create_geom_for_exclusive_groups(self, d, subgroup_ids):
-        super().create_geom_for_groups(d, subgroup_ids)
+    def _create_geom_exclusive_groups(self, d, subgroup_ids):
+        super()._create_geom_groups(d, subgroup_ids)
         self.create_array(d)
 
-    def create_excite_for_exclusive_groups(self, d, _exciteports):
+    def _create_excite_exclusive_groups(self, d, _exciteports,
+                                        exciteports_grp):
+        # Check to see if non element groups are being excited
+        if exciteports_grp:
+            # This should probably be an exception but I can't
+            # tell if there may be some interesting use case so
+            # I leave it as a warning. 
+            warnings.warn(f"Non embedded ports {exciteports_grp} excited so "
+                          "ordinary embedded calculations will be incorrect. "
+                          "Remove all port excitation values in model.")
         _nonelem_ex_ports = []
         _elem_ex_ports = []
         self.reset_port_srcs()
@@ -1272,19 +1367,31 @@ class ArrayModel(StructureModel):
     def as_neccards(self):
         return super().as_neccards(exclude_groups=self.element)
 
-    def calc_eeps_SC(self, eep_eb, save_necfile=False):
+    def excite_1by1(self, eep_eb, save_necfile=False, print_prog=False):
         """\
-        Calculate embedded element patterns (EEPs) for array
+        Excite elements one at a time to obtain embedded element properties
+
+        This method excites one element in the array at a time, leaving all
+        other non-excited elements with their nominal loading.
+        Since NEC2 is a MOM code, the excitation should be a voltage over
+        a conducting segment, and this makes the EE procedure a short-cicuit
+        EE excitation and the patterns will be the SC EEPs.
         
         Parameters
         ----------
         eep_eb : ExecutionBlock
-            The execution block to used to compute the EEPs
+            The execution block to used to compute the EEPs. Should have at
+            least one excited port with an arbitary voltage value.
+        save_nec : bool
+            Save as a NEC file
+        print_prog : bool
+            Print progress by printing to screen the embedded element being
+            excited.
         
         Returns
         -------
         results : EEPdata
-            The EEP data.
+            The EEP data, or specifically a EEP_SC() object.
         """
         _frq_cntr_step = eep_eb.freqsteps
         freqs = _frq_cntr_step.aslist()
@@ -1295,8 +1402,12 @@ class ArrayModel(StructureModel):
         _admittances = np.zeros((len(freqs), nr_ants, nr_ants), complex)
         sc = StructureCurrents(freqs, nr_ants)
         for antnr in range(nr_ants):
+            if print_prog:
+                print(f'Exciting antenna {antnr}/{nr_ants}', end='\r',
+                      flush=True)
             _prt_exc = ((antnr, _exciteport_name), _vltsrc)
-            _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat)
+            _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat,
+                                 ext_thinwire=eep_eb.ext_thinwire)
             _necout, nec_context = super().get_necout(_xb, save_necfile,
                                                       eb_id_suffix=str(antnr))
             _eep_sc.append(_necout)
@@ -1323,6 +1434,7 @@ class ArrayModel(StructureModel):
                     cur_port = sc.get_current(ex_tag, ex_seg)
                     admittances_T.append(cur_port / port.source.value)
                 _admittances[f,:,antnr] = np.array(admittances_T)
+        print() if print_prog else None
         results = EEP_SC(_eep_sc, _admittances, _vltsrc.value)
         return results
 

@@ -2,7 +2,7 @@ import sys
 from io import StringIO
 import numpy as np
 import matplotlib.pyplot as plt
-from nec2 import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
+from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
                   FreqSteps, ExecutionBlock, RadPatternSpec)
 
 np.set_printoptions(threshold=sys.maxsize)
@@ -45,6 +45,7 @@ CE345678901234567890123456789012345678901234567890123456789012345678901234567890
 GW  0    7       0.0        0.      -.25        0.        0.       .25      .001
 GE  0
 FR  0    2    0    0       50.        2.
+EK  1
 EX  0    0    4    0        1.        0.        0.        0.        0.        0.
 XQ  0
 LD  0    0    4    4       10. 3.000E-09 5.300E-11
@@ -67,7 +68,6 @@ def test_Deck_exec_pynec():
     for f in range(2):
         inp_parms = cntxt.get_input_parameters(f)
         print(inp_parms.get_impedance())
-
 
 def test_StructureModel():
     p1 = (+0.5, 0., 0.1)
@@ -95,6 +95,37 @@ def test_StructureModel():
         inp_parms = cntxt.get_input_parameters(f)
         for pnr, portname in enumerate(ex_ports):
             print(portname, inp_parms.get_impedance()[pnr])
+
+
+def test_manual_and_autosegment():
+    """\
+    Test of manual and autosegmentation
+    """
+    p1 = (0., 0., +0.5)
+    p2 = (0., 0.,  0.0)
+    p3 = (0., 0., -0.5)
+    l12 = (p1, p2)
+    l23 = (p2, p3)
+    wire_rad = 0.001
+    fs = FreqSteps('lin', 1, 150.)  # MHz
+    model = StructureModel('2partDip')
+    model['dip']['Z+'] = Wire(*l12, wire_rad)
+    model['dip']['Z-'] = Wire(*l23, wire_rad)
+    model['dip']['Z-'].add_port(0.0, 'VS')
+    eb = ExecutionBlock(None, [('VS', VoltageSource(1.0))])
+    #  Segmentalize manually
+    model['dip']['Z+'].nr_seg = 20
+    model['dip']['Z-'].nr_seg = 80
+    model.add_executionblock('exblk', eb)
+    # Converting to neccards assigns port seg nr
+    d = model.as_neccards()
+    print('Using manual segmentation '
+          'Excitation is on seg nr 21:', model['dip']['Z-'].port.ex_seg == 21)
+    segsperwavelen = 2*100
+    model.segmentalize(segsperwavelen, fs.max_freq())
+    d = model.as_neccards()
+    print(f'Using segmentalize() with {segsperwavelen/2} seg / lambda/2'
+          'Excitation is on seg nr 51:', model['dip']['Z-'].port.ex_seg==51)
 
 
 def sim_abraham_dip(freq):
@@ -133,7 +164,7 @@ def test_EEL():
     efflen_theory = abradip['dip']['Z'].length()/2.0
     efflen_simult = Hsc_abs*np.abs(eeldat.eels[0].inp_Z)
 
-    print(eeldat_OC.eels[0].f_tht, np.abs(eeldat.eels[0].inp_Z))
+    print(eeldat_OC.eels[0].f_tht, np.abs(eeldat.eels[0].inp_Z), Hsc_abs)
     print('Effective length for Abraham dipole...',
           'Simulated:', np.ndarray.item(efflen_simult),
           'Theory:', efflen_theory)
@@ -179,7 +210,7 @@ def test_ArrayModel_offcenter():
     arr_pos = [[10., 21., 15.]]
     offcnt.arrayify(element=['dip'], array_positions=arr_pos)
     eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = offcnt.calc_eeps_SC(eb, save_necfile=True)
+    eepdat = offcnt.excite_1by1(eb, save_necfile=True)
     sv = offcnt.calc_steering_vector(eb)
     ant_nr = 0
     frq_nr = 0
@@ -192,27 +223,37 @@ def test_ArrayModel_offcenter():
     print(_relangs)
 
 
-def lamhalfdip():
+def lamhalfdip(rad_lam=None):
     lamhalf = 1.0
-    w_radii = 1e-5*2*lamhalf
+    if rad_lam is None:
+        w_radii = 1e-5*2*lamhalf
+    else:
+        w_radii = rad_lam * 2*lamhalf
     dip_len = lamhalf
-    p1 = (0., 0., -dip_len/2)
-    p2 = (0., 0., +dip_len/2)
+    p1 = (-dip_len/2, 0., 0.5)
+    p2 = (+dip_len/2, 0., 0.5)
     l12 = (p1, p2)
     dip = StructureModel('lamhalfdip')
-    dip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    dip['dip']['X'] = Wire(*l12, w_radii).add_port(0.5,'VS')
     freq = 3e8/(2*lamhalf)
     dip.segmentalize(65, freq/1e6)
     return dip, freq
 
 
 def test_loaded_lamhalfdip():
-    dip, freq = lamhalfdip()
+    """\
+    Test loading of fat dipole over ground (uses extended thin wire kernel)
+    """
+    dip_fat, freq = lamhalfdip(0.01)
+    dip_fat.set_ground()  # Default is a PEC ground in Z=0 plane.
     fs = FreqSteps('lin', 1, freq/1e6)  # MHz
     rps = RadPatternSpec(nth=1, thets=90., nph=0, phis=0.)
     ex_port = ('VS', VoltageSource(1.0))
-    eepdat_SC = dip.calc_eep_SC(ExecutionBlock(fs, [ex_port], rps))
-    Y_load =1.0*1./(78.2-45.7j)
+    # Add "Extended Thin Wire kernel" to execution block
+    eb = ExecutionBlock(fs, [ex_port], rps, ext_thinwire=True)
+    eepdat_SC = dip_fat.calc_eep_SC(eb)
+    print("Diagnostics", dip_fat.seglamlens(), dip_fat.segthinness())
+    Y_load = 1.0*1./(78.2-45.7j)
     eepdat_NO = eepdat_SC.transform_to('NO', adm_load=np.atleast_2d(Y_load))
     eepdat_OC = eepdat_SC.transform_to('OC')
     eel_loaded = eepdat_NO.get_EELs()
@@ -257,13 +298,13 @@ def test_Array_2_lamhalfdip_sbys():
         arr_pos = [[0.,0.,0.], [dist, 0., 0.]]
         twodip.arrayify(element=['dip'],
                         array_positions=arr_pos)
-        eepdat = twodip.calc_eeps_SC(ExecutionBlock(fs, ex_port))
+        eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port))
         impmat = eepdat.get_impedances()
         mutimp.append(impmat[0,0,1])
     mutimp = np.array(mutimp)
     # Get wire radius
     _partname = list(twodip[_dipgrpname].parts.keys()).pop()
-    w_radii = twodip[_dipgrpname][_partname].thickness
+    w_radii = twodip[_dipgrpname][_partname].radius
     plt.plot(dists/(2*lamhalf), np.real(mutimp))
     plt.plot(dists/(2*lamhalf), np.imag(mutimp))
     plt.legend(['Resistive','Reactive'])
@@ -293,7 +334,7 @@ def test_get_antspats():
     arr_pos = [[0.,0.,0.], [lamhalf,0.,0.]]
     twodip.arrayify(element=['dip'],
                         array_positions=arr_pos)
-    eepdat = twodip.calc_eeps_SC(ExecutionBlock(fs, ex_port, rps))
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
     antspats_arr = eepdat.get_antspats_arr()
     ant_nr = 0
     frq_nr = 0
@@ -310,6 +351,7 @@ test_Deck()
 test_Deck_load_necfile()
 test_Deck_exec_pynec()
 test_StructureModel()
+test_manual_and_autosegment()
 test_EEL()
 test_SC_OC_transforms()
 test_ArrayModel_offcenter()
