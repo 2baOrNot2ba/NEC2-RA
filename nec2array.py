@@ -1031,7 +1031,7 @@ class StructureModel:
             _ports = self.groups[base_gid].get_ports()
             for _port in _ports:
                 _pp = self.groups[base_gid]._port_part(_port)
-                self.groups[base_gid][_pp].source = None
+                self.groups[base_gid][_pp].port.source = None
 
     def excite_port(self, port_id, voltage_src):
         """Attach a voltage source to port"""
@@ -1095,7 +1095,7 @@ class StructureModel:
                                 F1, F2, 0., 0., 0., 0.)
         return excited_ports_created
 
-    def _create_excite_exclusive_groups(self, d, _exciteports):
+    def _create_excite_exclusive_groups(self, d, _exciteports, exciteports_grp):
         pass
 
     def as_neccards(self, exclude_groups=None):
