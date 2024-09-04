@@ -1031,7 +1031,7 @@ class StructureModel:
             _ports = self.groups[base_gid].get_ports()
             for _port in _ports:
                 _pp = self.groups[base_gid]._port_part(_port)
-                self.groups[base_gid][_pp].source = None
+                self.groups[base_gid][_pp].port.source = None
 
     def excite_port(self, port_id, voltage_src):
         """Attach a voltage source to port"""
