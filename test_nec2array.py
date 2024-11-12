@@ -112,7 +112,7 @@ def test_manual_and_autosegment():
     model['dip']['Z+'] = Wire(*l12, wire_rad)
     model['dip']['Z-'] = Wire(*l23, wire_rad)
     model['dip']['Z-'].add_port(0.0, 'VS')
-    eb = ExecutionBlock(None, [('VS', VoltageSource(1.0))])
+    eb = ExecutionBlock(fs, [('VS', VoltageSource(1.0))])
     #  Segmentalize manually
     model['dip']['Z+'].nr_seg = 20
     model['dip']['Z-'].nr_seg = 80
@@ -123,8 +123,12 @@ def test_manual_and_autosegment():
           'Excitation is on seg nr 21:', model['dip']['Z-'].port.ex_seg == 21)
     segsperwavelen = 2*100
     model.segmentalize(segsperwavelen, fs.max_freq())
+    modelseglamlens = model.seglamlens()
+    # As per previous comment 
     d = model.as_neccards()
-    print(f'Using segmentalize() with {segsperwavelen/2} seg / lambda/2'
+    print(f'Using segmentalize() with {segsperwavelen} seg/lambda '
+          f'(ie {1/segsperwavelen} lam/seg) '
+          f'Achieved lam/seg: {modelseglamlens}\n'
           'Excitation is on seg nr 51:', model['dip']['Z-'].port.ex_seg==51)
 
 
