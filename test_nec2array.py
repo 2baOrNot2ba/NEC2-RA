@@ -165,6 +165,9 @@ def test_EEL():
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
+    _phs_rct, f_rct = eeldat_OC.rectifying_phase()
+
+    print('P eak linear length:', np.linalg.norm(np.real(f_rct)),'m')
     efflen_theory = abradip['dip']['Z'].length()/2.0
     efflen_simult = Hsc_abs*np.abs(eeldat.eels[0].inp_Z)
 
