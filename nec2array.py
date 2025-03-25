@@ -638,6 +638,27 @@ class EEPdata:
         eeldata.set_antspat_arr(antspats)
         return eeldata
     
+    def rectifying_phase(self):
+        """\
+        Compute the rectifying phase
+
+        Calculates the rectifying phase of the complex vector field F
+        using phs=arg(F.F)/2.
+
+        Returns
+        -------
+        phs_rct : ndarray
+            Rectifying phase field. The component-shape is [ant, frq, tht, phi].
+
+        antspats_rct : ndarray
+            Rectified complex vector pattern field.
+            The component-shape is [ant, frq, tht, phi, pol].
+        """
+        antspats = self.get_antspats_arr()
+        phs_rct = np.angle(antspats[..., 0]**2 + antspats[..., 1]**2)/2
+        antspat_rct = antspats * np.exp(-1j*phs_rct[..., np.newaxis])
+        return phs_rct, antspat_rct
+    
     def __eq__(self, __value: object) -> bool:
         if self.excite_typ != __value.excite_typ:
             return False
