@@ -25,7 +25,7 @@ warnick6['ant_Z']['w'].add_port(0.5, 'the_port')
 
 # Set up execution settings
 nr_freqs = 1
-frq_cntr = 3.0e8 * lambda_ /1e6
+frq_cntr = 3.0e8 / lambda_ /1e6
 frq_cntr_step = FreqSteps('lin', nr_freqs, frq_cntr)
 warnick6.segmentalize(201, frq_cntr)
 _port_ex = ('the_port', VoltageSource(1.0))
