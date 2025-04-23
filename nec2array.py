@@ -1197,13 +1197,16 @@ class StructureModel:
             for nec_context in _deck.exec_pynec():
                 ef_vert = []
                 ef_hori = []
+                voltages = []
+                currents = []
+                impedances = []
                 for f in range(len(freqs)):
                     # Input (excitation) parameters
                     inp_parms = nec_context.get_input_parameters(f)
                     # ##frequency = inp_parms.get_frequency()
-                    Z = inp_parms.get_impedance()
-                    I = inp_parms.get_current()
-                    V = inp_parms.get_voltage()
+                    voltages.append(inp_parms.get_voltage())
+                    currents.append(inp_parms.get_current())
+                    impedances.append(inp_parms.get_impedance())
 
                     # Radiation pattern
                     radpat_out = nec_context.get_radiation_pattern(f)
@@ -1225,7 +1228,9 @@ class StructureModel:
                         thetas = None
                         phis = None
                 necout = NECout(freqs, thetas, phis, np.array(ef_vert),
-                                 np.array(ef_hori), inp_V=V, inp_I=I, inp_Z=Z)
+                                np.array(ef_hori), inp_V=np.array(voltages),
+                                inp_I=np.array(currents),
+                                inp_Z=np.array(impedances))
             return necout, nec_context
 
     def calc_eep_SC(self, eb, save_necfile=False):
