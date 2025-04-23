@@ -671,10 +671,11 @@ class EEPdata:
 
 class EEP_SC(EEPdata):
     def __init__(self, eep_sc, admittances_arr, voltage_excite=1.0):
-        self.eeps = eep_sc
+        # Set up super, EEPdata, stuff first:
+        super().__init__(eep_sc, admittances_arr, 'SC', voltage_excite)
+        # Set up EEP_SC specific
         self.admittances = admittances_arr
         self.voltage_excite = voltage_excite
-        self.excite_typ = 'SC'
     
     def transform_to(self, excite_typ, excite_val=1., imp_load=None,
                      adm_load=None):
@@ -720,10 +721,10 @@ class EEP_SC(EEPdata):
 
 class EEP_OC(EEPdata):
     def __init__(self, eep_oc, impedances_arr, current_excite=1.0):
-        self.eeps = eep_oc
+        # Set up super, EEPdata, stuff:
+        super().__init__(eep_oc, impedances_arr, 'OC', current_excite)
         self.impedances = impedances_arr
         self.current_excite = current_excite
-        self.excite_typ = 'OC'
     
     def transform_to(self, excite_typ, excite_val=1., imp_load=None):
         if excite_typ == self.excite_typ:
@@ -756,12 +757,12 @@ class EEP_OC(EEPdata):
 
 
 class EEP_NO(EEPdata):
-    def __init__(self, eep_th, adm_arr, adm_load, current_excite=1.0):
-        self.eeps = eep_th
+    def __init__(self, eep_no, adm_arr, adm_load, current_excite=1.0):
+        # Set up super, EEPdata, stuff:
+        super().__init__(eep_no, adm_arr, 'NO', current_excite)
         self.admittances = adm_arr
         self.adm_load = adm_load
         self.current_excite = current_excite
-        self.excite_typ = 'NO'
 
     def transform_to(self, excite_typ, excite_val=1.):
         if excite_typ == self.excite_typ:
@@ -789,11 +790,11 @@ class EEP_NO(EEPdata):
 
 class EEP_TH(EEPdata):
     def __init__(self, eep_th, imp_arr, imp_load, voltage_excite=1.0):
-        self.eeps = eep_th
+        # Set up super, EEPdata, stuff:
+        super().__init__(eep_th, imp_arr, 'TH', voltage_excite)
         self.impedances = imp_arr
         self.imp_load = imp_load
         self.voltage_excite = voltage_excite
-        self.excite_typ = 'TH'
 
     def transform_to(self, excite_typ, excite_val=1.):
         if excite_typ == self.excite_typ:
