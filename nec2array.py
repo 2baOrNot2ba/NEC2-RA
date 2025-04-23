@@ -712,7 +712,8 @@ class EEP_SC(EEPdata):
                 adm_load = np.linalg.inv(imp_load)
             adm_arr = self.get_admittances()
             # Create new EEP_NO object to hold results to be return:ed
-            eepdat_tr = EEP_NO(_ee, np.copy(adm_arr), adm_load, excite_val)
+            adm_arr = np.copy(self.get_admittances())
+            eepdat_tr = EEP_NO(_ee, adm_arr, adm_load, excite_val)
             _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
             # Warnick2021 eq. 6
             antspat_tr = np.linalg.inv(adm_load + _adm_arr_ext) @ ap_SC_0
