@@ -709,8 +709,11 @@ class EEP_SC(EEPdata):
             raise NotImplementedError('Transform from SC -> TH not implemented')
         elif excite_typ == 'NO':
             if adm_load is None and imp_load is not None:
+                if np.isscalar(imp_load):
+                    imp_load = imp_load*np.identity(len(imp_arr))
                 adm_load = np.linalg.inv(imp_load)
-            adm_arr = self.get_admittances()
+            if np.isscalar(adm_load):
+                adm_load = adm_load*np.identity(len(imp_arr))
             # Create new EEP_NO object to hold results to be return:ed
             adm_arr = np.copy(self.get_admittances())
             eepdat_tr = EEP_NO(_ee, adm_arr, adm_load, excite_val)
@@ -743,6 +746,8 @@ class EEP_OC(EEPdata):
             # Warnick2021 eq. 7
             antspat_tr = _adm_arr_ext @ ap_OC_0
         elif excite_typ == 'TH':
+            if np.isscalar(imp_load):
+                imp_load = imp_load*np.identity(len(imp_arr))
             imp_arr = np.copy(self.get_impedances())
             eepdat_tr = EEP_TH(_ee, imp_arr, imp_load, excite_val)
             _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
