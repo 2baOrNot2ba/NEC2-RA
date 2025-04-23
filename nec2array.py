@@ -539,15 +539,19 @@ class EEPdata:
         Admittances has shape (nfrq, nths, nphs, nant, nant)
         """
         if self.excite_typ == 'SC' or self.excite_typ == 'NO':
-            return self.admittances
+            adm = self.adm_or_imp
+            return adm
         elif self.excite_typ == 'OC' or self.excite_typ == 'TH':
-            return np.linalg.inv(self.impedances)  
+            imp = self.adm_or_imp
+            return np.linalg.inv(imp)  
     
     def get_impedances(self):
         if self.excite_typ == 'OC' or self.excite_typ == 'TH':
-            return self.impedances
+            imp = self.adm_or_imp
+            return imp
         elif self.excite_typ == 'SC' or self.excite_typ == 'NO':
-            return np.linalg.inv(self.admittances)
+            adm = self.adm_or_imp
+            return np.linalg.inv(adm)
 
     def _get_embedded_elements(self):
         return self.eeps
