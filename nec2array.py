@@ -1233,10 +1233,11 @@ class StructureModel:
                                 inp_Z=np.array(impedances))
             return necout, nec_context
 
-    def calc_eep_SC(self, eb, save_necfile=False):
+    def calc_eep_SC(self, eb, ref_port_nr=0, save_necfile=False):
             necout, _ = self.get_necout(eb, save_necfile)
-            eep_sc = EEP_SC([necout], np.atleast_2d(1/necout.inp_Z),
-                             eb.exciteports[0][1].value)
+            # Use impedance of excited reference port number ref_port_nr
+            adm = 1/necout.inp_Z[:, ref_port_nr, np.newaxis, np.newaxis]
+            eep_sc = EEP_SC([necout], adm, eb.exciteports[ref_port_nr][1].value)
             return eep_sc
 
     def __getitem__(self, group_id):
