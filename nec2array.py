@@ -522,13 +522,15 @@ class EEPdata:
 
     Superclass to EEP_SC, EEP_OC, EEP_NO, EEP_TH and EEL
     """
-    def __init__(self, eeps, adm_or_imp, excite_typ='SC', excite_val=1.0):
+    def __init__(self, eeps, adm_or_imp, excite_typ='SC', adm_or_imp_load=None,
+                 excite_val=1.0):
         self.eeps = eeps  # One NecOut (ie EEP) for each excitation (ie element)
         # 'OC' open-circuit implies current
         # 'SC' short-circuit implies voltage
         self.excite_typ = excite_typ
         self.excite_val = excite_val  # Amplitude
         self.adm_or_imp = adm_or_imp  # admittance if SC, impedance if OC
+        self.adm_or_imp_load = adm_or_imp_load
 
     def get_admittances(self):
         """\
@@ -676,7 +678,8 @@ class EEPdata:
 class EEP_SC(EEPdata):
     def __init__(self, eep_sc, admittances_arr, voltage_excite=1.0):
         # Set up super, EEPdata, stuff first:
-        super().__init__(eep_sc, admittances_arr, 'SC', voltage_excite)
+        super().__init__(eep_sc, admittances_arr, excite_typ='SC',
+                         adm_or_imp_load=None, excite_val=voltage_excite)
         # Set up EEP_SC specific
         self.admittances = admittances_arr
         self.voltage_excite = voltage_excite
@@ -728,7 +731,8 @@ class EEP_SC(EEPdata):
 class EEP_OC(EEPdata):
     def __init__(self, eep_oc, impedances_arr, current_excite=1.0):
         # Set up super, EEPdata, stuff:
-        super().__init__(eep_oc, impedances_arr, 'OC', current_excite)
+        super().__init__(eep_oc, impedances_arr, excite_typ='OC',
+                         adm_or_imp_load=None, excite_val=current_excite)
         self.impedances = impedances_arr
         self.current_excite = current_excite
     
@@ -763,7 +767,8 @@ class EEP_OC(EEPdata):
 class EEP_NO(EEPdata):
     def __init__(self, eep_no, adm_arr, adm_load, current_excite=1.0):
         # Set up super, EEPdata, stuff:
-        super().__init__(eep_no, adm_arr, 'NO', current_excite)
+        super().__init__(eep_no, adm_arr, excite_typ='NO',
+                         adm_or_imp_load=adm_load, excite_val=current_excite)
         self.admittances = adm_arr
         self.adm_load = adm_load
         self.current_excite = current_excite
@@ -793,7 +798,8 @@ class EEP_NO(EEPdata):
 class EEP_TH(EEPdata):
     def __init__(self, eep_th, imp_arr, imp_load, voltage_excite=1.0):
         # Set up super, EEPdata, stuff:
-        super().__init__(eep_th, imp_arr, 'TH', voltage_excite)
+        super().__init__(eep_th, imp_arr, excite_typ='TH',
+                         adm_or_imp_load=imp_load, excite_val=voltage_excite)
         self.impedances = imp_arr
         self.imp_load = imp_load
         self.voltage_excite = voltage_excite
@@ -819,7 +825,6 @@ class EEP_TH(EEPdata):
         eepdat_tr.set_antspat_arr(antspat_tr)
         return eepdat_tr
     
-
 
 class EELdata(EEPdata):
     def __init__(self, eels, adm_or_imp, excite_typ):
