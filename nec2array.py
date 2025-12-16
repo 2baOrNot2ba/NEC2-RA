@@ -838,6 +838,30 @@ class EELdata(EEPdata):
 
     def _get_embedded_elements(self):
         return self.eels
+    
+    def area_eff(self):
+        """\
+        Compute the effective area
+
+        Returns
+        -------
+        area_effs : array
+            Effective area with the same shape as the self.eels
+        """
+        area_effs = []
+        for eel, aoi_l in zip(self.eels, self.adm_or_imp_load):
+            a_e_cmplx_un = ETA0 / 4 * (np.abs(eel.f_tht)**2
+                                       +np.abs(eel.f_phi)**2)
+            if self.excite_typ == 'TH':
+                a_e_cmplx = 1/aoi_l * a_e_cmplx_un
+            elif self.excite_typ == 'NO':
+                a_e_cmplx = aoi_l * a_e_cmplx_un
+            else:
+                raise NotImplementedError('Only TH and NO loading')
+            a_e = np.real(a_e_cmplx)
+            area_effs.append(a_e)
+        area_effs = np.asarray(area_effs)
+        return area_effs
 
 
 class TaggedGroup:
