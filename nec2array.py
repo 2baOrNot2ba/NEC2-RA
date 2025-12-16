@@ -751,9 +751,9 @@ class EEP_OC(EEPdata):
             # Warnick2021 eq. 7
             antspat_tr = _adm_arr_ext @ ap_OC_0
         elif excite_typ == 'TH':
+            imp_arr = np.copy(self.get_impedances())
             if np.isscalar(imp_load):
                 imp_load = imp_load*np.identity(imp_arr.shape[-1])
-            imp_arr = np.copy(self.get_impedances())
             eepdat_tr = EEP_TH(_ee, imp_arr, imp_load, excite_val)
             _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
             # Warnick2021 eq. 4
