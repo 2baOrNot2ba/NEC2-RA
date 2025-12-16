@@ -160,7 +160,7 @@ def test_EEL():
     ex_port = (port_name, VoltageSource(1.0))
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, [ex_port], rps)
-    eepdat = abradip.calc_eep_SC(eb, True)
+    eepdat = abradip.calc_eep_SC(eb)
     eeldat_OC = eepdat.transform_to('OC').get_EELs()
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
