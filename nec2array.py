@@ -607,6 +607,7 @@ class EEPdata:
         """\
         Calculate Embedded Element Lengths from EEPs
         """
+        adm_or_imp_load = None
         if self.excite_typ == 'SC':
             excite_val = self.voltage_excite
             adm_or_imp = self.admittances
@@ -634,7 +635,7 @@ class EEPdata:
             elif self.excite_typ == 'SC' or self.excite_typ == 'TH':
                 _ee.f_type = 'Length/Impedance'
         eeldata = EELdata(_ees, np.copy(adm_or_imp),
-                          self.excite_typ) 
+                          self.excite_typ, np.copy(adm_or_imp_load))
         antspats = self.get_antspats_arr()
         antspats = 2.j/(MU0*freqs*1e6*excite_val)*antspats  # 1e6 = MHz to Hz
         if self.excite_typ == 'TH':
@@ -827,10 +828,11 @@ class EEP_TH(EEPdata):
     
 
 class EELdata(EEPdata):
-    def __init__(self, eels, adm_or_imp, excite_typ):
+    def __init__(self, eels, adm_or_imp, excite_typ=None, adm_or_imp_load=None):
         self.eels = eels
         self.adm_or_imp = adm_or_imp
         self.excite_typ = excite_typ
+        self.adm_or_imp_load = adm_or_imp_load
 
     def _get_embedded_elements(self):
         return self.eels
