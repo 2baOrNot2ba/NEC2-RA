@@ -5,7 +5,7 @@ import pathlib
 import numpy as np
 import warnings
 
-C0 = 299,792,458  # Speed of light
+C0 = 2.99792458e8  # Speed of light
 MU0 = 4*np.pi*1e-7  # H/m aka vacuum magnetic permeability
 ETA0 = MU0 * C0  # Impedance of free space
 
