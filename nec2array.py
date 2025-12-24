@@ -864,7 +864,17 @@ class EELdata(EEPdata):
             Effective area with the same shape as the self.eels
         """
         area_effs = []
-        for eel, aoi_l in zip(self.eels, self.adm_or_imp_load):
+        load_adm_or_imp = self.adm_or_imp_load
+        if load_adm_or_imp.ndim == 2:
+            load_adm_or_imp_ = np.diagonal(self.adm_or_imp_load,
+                                           axis1=-2, axis2=-1)
+        else:
+            load_adm_or_imp_ = np.squeeze(
+                np.moveaxis(
+                    np.diagonal(self.adm_or_imp_load, axis1=-2, axis2=-1),
+                -1, 0),
+            -1)
+        for eel, aoi_l in zip(self.eels, load_adm_or_imp_):
             a_e_cmplx_un = ETA0 / 4 * (np.abs(eel.f_tht)**2
                                        +np.abs(eel.f_phi)**2)
             if self.excite_typ == 'TH':
