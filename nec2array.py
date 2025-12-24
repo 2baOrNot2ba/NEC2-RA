@@ -689,8 +689,22 @@ class EEP_SC(EEPdata):
         self.admittances = admittances_arr
         self.voltage_excite = voltage_excite
     
-    def transform_to(self, excite_typ, excite_val=1., imp_load=None,
-                     adm_load=None):
+    def transform_to(self, excite_typ, excite_val=1., adm_load=None):
+        """
+        Transform this SC EEP to OC or NO
+        
+        Parameters
+        ----------
+        excite_typ: str
+            Excitation type to transform to; can be: 'OC' or 'NO'.
+        excite_val: float
+            Value of the excitation voltage or current
+        adm_load: array
+            Load admittance for transform to 'NO', in Mhos.
+            `None` (default) for transform to 'OC'.
+            If your is given as an impedance instead of an admittance,
+            the set this argument to 1/impedance. 
+        """
         if excite_typ == self.excite_typ:
             return deepcopy(self)
         # _ee is placeholder var: gets overwritten before returning when
@@ -716,12 +730,11 @@ class EEP_SC(EEPdata):
         elif excite_typ == 'TH':
             raise NotImplementedError('Transform from SC -> TH not implemented')
         elif excite_typ == 'NO':
-            if adm_load is None and imp_load is not None:
-                if np.isscalar(imp_load):
-                    imp_load = imp_load*np.identity(imp_arr.shape[-1])
-                adm_load = np.linalg.inv(imp_load)
             if np.isscalar(adm_load):
                 adm_load = adm_load*np.identity(imp_arr.shape[-1])
+            elif adm_load.ndim == 1:
+                adm_load = (np.expand_dims(adm_load, axis=(1,2,3,4,5))
+                            * np.identity(imp_arr.shape[-1]))
             # Create new EEP_NO object to hold results to be return:ed
             adm_arr = np.copy(self.get_admittances())
             eepdat_tr = EEP_NO(_ee, adm_arr, adm_load, excite_val)
