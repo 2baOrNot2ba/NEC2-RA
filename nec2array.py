@@ -375,7 +375,7 @@ class FreqSteps:
     start: float = 299.8  # MHz
     incr: float = 1.
 
-    def aslist(self):
+    def aslist(self, MHz=True):
         frqlist = []
         for fi in range(self.nrsteps):
             if self.steptype == 'lin':
@@ -383,6 +383,8 @@ class FreqSteps:
             else:
                 frq = self.start*self.incr**fi
             frqlist.append(frq)
+        if not MHz:
+            frqlist = [_f*1e6 for _f in frqlist]
         return frqlist
 
     def max_freq(self):
