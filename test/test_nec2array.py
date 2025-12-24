@@ -3,7 +3,7 @@ from io import StringIO
 import numpy as np
 import matplotlib.pyplot as plt
 from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
-                  FreqSteps, ExecutionBlock, RadPatternSpec)
+                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC)
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -193,7 +193,9 @@ def test_SC_OC_transforms():
     print("EELs. Should be False:", eel_SC2 == eel_SC)
     print("EELs. Should be True:", eel_OC_SC == eel_SC)
     # Thevenin
-    eep_NO = eep_SC.transform_to('NO', adm_load=1/50. * np.identity(1))
+    load_adm = impedanceRLC(fs.aslist(), 50., None, 1e-12, 'parallel', False)
+    print('LOAD',1/load_adm)
+    eep_NO = eep_SC.transform_to('NO', adm_load=load_adm)
     eel_NO = eep_NO.get_EELs()
     print(eel_SC.eels)
     print(eel_NO.eels)
@@ -319,6 +321,48 @@ def test_Array_2_lamhalfdip_sbys():
               'simulated with NEC2 '
               f'(wire radius={w_radii/(2*lamhalf)} lambda)')
     plt.show()
+
+
+def test_Array_with_loads():
+    """
+    Test array with given load
+
+    Same array as in test_Array_2_lamhalfdip_sbys()
+    """
+    # Use function to build model of lambda half dipole
+    twodip = two_lamhalfdip()
+    fs = FreqSteps('lin', 30, 80., 4.)  # MHz
+    twodip.segmentalize(65, fs.max_freq())
+    portname = 'VS'
+    ex_port = (portname, VoltageSource(1.0))
+    arr_pos = [[0.,0.,0.], [6., 0., 0.]]
+    twodip.arrayify(element=['dip'], array_positions=arr_pos)
+    rps = RadPatternSpec(nth=1, dth=1., thets=90., phis=0.)
+    #rps = None
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
+
+    load_adm = impedanceRLC(fs.aslist(False), 75.-0.0j, None, None, 'parallel', False)
+    #load_adm_k = impedanceRLC(fs.aslist(False), 1000., 17e-7, None, 'series', False)
+
+    eepNO = eepdat.transform_to('NO', adm_load=load_adm)
+    a_NO = eepNO.get_EELs().area_eff()
+    a=np.diagonal(eepdat.get_impedances(),axis1=-2,axis2=-1)[...,0]
+    b=1/load_adm
+
+    plt.plot(fs.aslist(), np.real(a), 'b')
+    plt.plot(fs.aslist(), np.imag(a), 'r')
+    plt.plot(fs.aslist(), np.real(b), 'b.-')
+    plt.plot(fs.aslist(), np.imag(b), 'r.-')
+    plt.grid()
+    plt.show()
+    _n = a_NO[1,:].squeeze()
+    plt.plot(fs.aslist(), _n,'k')
+    print(np.max(_n))
+    plt.xlabel('Freq. [MHz]')
+    plt.ylabel('Area eff [m^2]')
+    plt.title('Thin loaded dipole')
+    plt.show()
+
 
 def test_get_antspats():
     """
