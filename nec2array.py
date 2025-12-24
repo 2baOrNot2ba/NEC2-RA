@@ -520,6 +520,71 @@ class StructureCurrents:
         return self.currents[self._current_index(tag, seg)]
 
 
+def impedanceRLC(freqs, R, L, C, coupling, imp_not_adm=True):
+    """
+    Compute impedance of a R-L-C circuit
+    
+    Parameters
+    ----------
+    freqs: array
+        Frequencies in Hz.
+    R: float
+        Resistance in Ohms. If not used set to `None`.
+    L: float
+        Inductance in Henries. If not used set to `None`.
+    C: float
+        Capacitance in Farads. If not used set to `None`.
+    coupling: str
+        Circuit coupling of the lumped circuit. Can be 'parallel' or 'series'.
+    imp_not_adm: bool
+        Whether to output responce as a impedance (default), when True,
+        or admittance, when False.
+    
+    Returns
+    -------
+    imp | adm: array
+        Impedance or admittance as of function of the input frequencies.
+    """
+    imp = None
+    adm = None
+    omegas = 2*np.pi*np.asarray(freqs)
+    if coupling=='parallel':
+        Y_R = 0.
+        Y_L = 0.
+        Y_C = 0.
+        if R is not None:
+            Y_R = 1/R * np.ones_like(omegas)
+        if L is not None:
+            Y_L = 1/(1j*omegas*L)
+        if C is not None:
+            Y_C = 1j*omegas*C
+        adm = Y_R + Y_L + Y_C
+    elif coupling=='series':
+        Z_R = 0.
+        Z_L = 0.
+        Z_C = 0.
+        if R is not None:
+            Z_R = R * np.ones_like(omegas)
+        if L is not None:
+            Z_L = 1j*omegas*L
+        if C is not None:
+            Z_C = 1/(1j*omegas*C)
+        imp = Z_R + Z_L + Z_C
+    else:
+        raise ValueError(f"coupling='{coupling}' not valid."
+                          "(try 'parallel' or 'series')")
+    if L and C:
+        print("Resonance frequency is:", 1/np.sqrt(L*C)/(2*np.pi),'Hz')
+    if imp is None and imp_not_adm:
+        imp = 1/adm
+    if adm is None and not imp_not_adm:
+        adm = 1/imp
+    if imp_not_adm:
+        return imp
+    else:
+        return adm
+
+
 class EEPdata:
     """\
     Class for Embedded Element Pattern data
