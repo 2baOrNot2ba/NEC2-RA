@@ -323,44 +323,54 @@ def test_Array_2_lamhalfdip_sbys():
     plt.show()
 
 
-def test_Array_with_loads():
+def test_tuned_dipole_Array():
     """
-    Test array with given load
+    Test array of dipoles with tuned (pass-band LC) loads
 
-    Same array as in test_Array_2_lamhalfdip_sbys()
+    Same array as in test_Array_2_lamhalfdip_sbys() but with parallel
+    LC circuit. Tuned circuit, a parallel LC load, has a resonance at ~80MHz,
+    and the effective area spectrum should exhibit a peak at 80MHz in this test.
     """
     # Use function to build model of lambda half dipole
     twodip = two_lamhalfdip()
-    fs = FreqSteps('lin', 30, 80., 4.)  # MHz
+    fs = FreqSteps('lin', 80, 70., 0.25)  # MHz
     twodip.segmentalize(65, fs.max_freq())
     portname = 'VS'
     ex_port = (portname, VoltageSource(1.0))
-    arr_pos = [[0.,0.,0.], [6., 0., 0.]]
+    arr_pos = [[0.,0.,0.], [50., 0., 0.]]
     twodip.arrayify(element=['dip'], array_positions=arr_pos)
     rps = RadPatternSpec(nth=1, dth=1., thets=90., phis=0.)
     #rps = None
     eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
 
-    load_adm = impedanceRLC(fs.aslist(False), 75.-0.0j, None, None, 'parallel', False)
-    #load_adm_k = impedanceRLC(fs.aslist(False), 1000., 17e-7, None, 'series', False)
+    #load_adm = impedanceRLC(fs.aslist(False), 75.-0.0j, None, None, 'parallel', False)
+    # Use FreqSteps.aslist(False) to get frequencies in Hertz rather than MHz.
+    load_adm = impedanceRLC(fs.aslist(False), R=1000., L=20e-9, C=198e-12, coupling='parallel', imp_not_adm=False)
 
     eepNO = eepdat.transform_to('NO', adm_load=load_adm)
     a_NO = eepNO.get_EELs().area_eff()
-    a=np.diagonal(eepdat.get_impedances(),axis1=-2,axis2=-1)[...,0]
-    b=1/load_adm
+    ant_nr = 0  # Check
+    a = np.diagonal(eepdat.get_impedances(), axis1=-2, axis2=-1)[..., ant_nr]
+    b = 1/load_adm
 
     plt.plot(fs.aslist(), np.real(a), 'b')
     plt.plot(fs.aslist(), np.imag(a), 'r')
     plt.plot(fs.aslist(), np.real(b), 'b.-')
     plt.plot(fs.aslist(), np.imag(b), 'r.-')
     plt.grid()
+    plt.xlabel('Freq. [MHz]')
+    plt.ylabel('Impedance [Ohm]')
+    plt.title('Tuned circuit')
+    plt.legend(['Ant. imp., Re', 'Ant. imp., Im',
+                'Load imp., Re', 'Load imp., Im'])
     plt.show()
-    _n = a_NO[1,:].squeeze()
+    _n = a_NO[ant_nr, :].squeeze()
     plt.plot(fs.aslist(), _n,'k')
-    print(np.max(_n))
+    plt.grid()
+    print('Max eff. area:', np.max(_n),'m^2')
     plt.xlabel('Freq. [MHz]')
     plt.ylabel('Area eff [m^2]')
-    plt.title('Thin loaded dipole')
+    plt.title('Resonance in eff area for tuned dipole')
     plt.show()
 
 
@@ -406,5 +416,6 @@ test_SC_OC_transforms()
 test_ArrayModel_offcenter()
 test_loaded_lamhalfdip()
 test_Array_2_lamhalfdip_sbys()
+test_tuned_dipole_Array()
 test_get_antspats()
 
