@@ -943,7 +943,7 @@ class EELdata(EEPdata):
                 -1, 0),
             -1)
         for eel, aoi_l in zip(self.eels, load_adm_or_imp_):
-            a_e_cmplx_un = ETA0 / 4 * (np.abs(eel.f_tht)**2
+            a_e_cmplx_un = ETA0 / 2 * (np.abs(eel.f_tht)**2
                                        +np.abs(eel.f_phi)**2)
             if self.excite_typ == 'TH':
                 a_e_cmplx = 1/aoi_l * a_e_cmplx_un
