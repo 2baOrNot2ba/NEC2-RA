@@ -928,6 +928,9 @@ class EELdata(EEPdata):
         area_effs : array
             Effective area with the same shape as the self.eels
         """
+        if self.excite_typ != 'TH' and self.excite_typ != 'NO':
+            raise NotImplementedError(
+                f'Excite type is {self.excite_typ} but only TH and NO loading')
         area_effs = []
         load_adm_or_imp = self.adm_or_imp_load
         if load_adm_or_imp.ndim == 2:
@@ -946,8 +949,6 @@ class EELdata(EEPdata):
                 a_e_cmplx = 1/aoi_l * a_e_cmplx_un
             elif self.excite_typ == 'NO':
                 a_e_cmplx = aoi_l * a_e_cmplx_un
-            else:
-                raise NotImplementedError('Only TH and NO loading')
             a_e = np.real(a_e_cmplx)
             area_effs.append(a_e)
         area_effs = np.asarray(area_effs)
