@@ -323,6 +323,39 @@ def test_Array_2_lamhalfdip_sbys():
     plt.show()
 
 
+def test_dipole_area():
+    """
+    Test effective area calculation applied to a linear dipole
+
+    Using EELdata().area_eff() for simple dipole one should get a maximum value
+    of 0.125 lambda^2, when load impedance is 50 Ohms and for matching polarized
+    incident radiation.
+    
+    Ref: Row 1, Tab. 1, Diao 2017, doi:10.1109/TAP.2016.2632618
+    """
+    # Use function to build model of lambda half dipole
+    twodip = lamhalfdip_alongZ()
+    fs = FreqSteps('lin', 80, 120., 0.5)  # MHz
+    twodip.segmentalize(201, fs.max_freq())
+    portname = 'VS'
+    ex_port = (portname, VoltageSource(1.0))
+    arr_pos = [[0.,0.,0.]]
+    twodip.arrayify(element=['dip'], array_positions=arr_pos)
+    rps = RadPatternSpec(nth=1, dth=1., thets=90., phis=0.)
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
+    load_adm = impedanceRLC(fs.aslist(False), 50.-0.0j, None, None, 'parallel', False)
+    eepNO = eepdat.transform_to('NO', adm_load=load_adm)
+    a_NO = eepNO.get_EELs().area_eff()
+    ant_nr = 0
+    lam = 3e8/np.asarray(fs.aslist(False))
+    _n = a_NO[ant_nr, :].squeeze(axis=(-2,-1))
+    ant_len =twodip['dip'].total_length()
+    _lammaxi = np.argmax(_n)
+    print('For linear 50 Ohm loaded dipole and matched incident polarization:')
+    print('    max Eff. Area:', np.round(2*_n[_lammaxi]/(lam[_lammaxi]**2), 3),
+          '(should be = 0.125 lam², factor 2 > unpolarized)')
+
+
 def test_tuned_dipole_Array():
     """
     Test array of dipoles with tuned (pass-band LC) loads
@@ -416,6 +449,7 @@ test_SC_OC_transforms()
 test_ArrayModel_offcenter()
 test_loaded_lamhalfdip()
 test_Array_2_lamhalfdip_sbys()
+test_dipole_area()
 test_tuned_dipole_Array()
 test_get_antspats()
 
