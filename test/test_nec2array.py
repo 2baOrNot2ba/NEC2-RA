@@ -230,7 +230,7 @@ def test_ArrayModel_offcenter():
     print(_relangs)
 
 
-def lamhalfdip(rad_lam=None):
+def lamhalfdip_aboveX(rad_lam=None):
     lamhalf = 1.0
     if rad_lam is None:
         w_radii = 1e-5*2*lamhalf
@@ -247,11 +247,23 @@ def lamhalfdip(rad_lam=None):
     return dip, freq
 
 
+def lamhalfdip_alongZ(rad_lam=1e-5):
+    dip_len = 1.0
+    lamhalf = dip_len
+    w_radii = rad_lam*2*lamhalf
+    p1 = (0., 0., -dip_len/2)
+    p2 = (0., 0., +dip_len/2)
+    l12 = (p1, p2)
+    zdip = ArrayModel('Zdip_sbs')
+    zdip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5, 'VS')
+    return zdip
+
+
 def test_loaded_lamhalfdip():
     """\
     Test loading of fat dipole over ground (uses extended thin wire kernel)
     """
-    dip_fat, freq = lamhalfdip(0.01)
+    dip_fat, freq = lamhalfdip_aboveX(0.01)
     dip_fat.set_ground()  # Default is a PEC ground in Z=0 plane.
     fs = FreqSteps('lin', 1, freq/1e6)  # MHz
     rps = RadPatternSpec(nth=1, thets=90., nph=0, phis=0.)
@@ -271,18 +283,6 @@ def test_loaded_lamhalfdip():
     print(377*Y_load*(np.abs(eel_loaded.eels[0].f_tht).item())**2)
 
 
-def two_lamhalfdip():
-    lamhalf = 1.0
-    w_radii = 1e-5*2*lamhalf
-    dip_len = lamhalf
-    p1 = (0., 0., -dip_len/2)
-    p2 = (0., 0., +dip_len/2)
-    l12 = (p1, p2)
-    twodip = ArrayModel('2dip_sbs')
-    twodip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
-    return twodip
-
-
 def test_Array_2_lamhalfdip_sbys():
     """
     Test of two lambda/2 dipole side-by-side array
@@ -290,7 +290,7 @@ def test_Array_2_lamhalfdip_sbys():
     See Balanis Antenna Theory 2016, Fig 8.21
     """
     # Use function to build model of lambda half dipole
-    twodip = two_lamhalfdip()
+    twodip = lamhalfdip_alongZ()
     # Get the port name...
     _dipgrpname = list(twodip.groups.keys()).pop()
     portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
@@ -332,7 +332,7 @@ def test_tuned_dipole_Array():
     and the effective area spectrum should exhibit a peak at 80MHz in this test.
     """
     # Use function to build model of lambda half dipole
-    twodip = two_lamhalfdip()
+    twodip = lamhalfdip_alongZ()
     fs = FreqSteps('lin', 80, 70., 0.25)  # MHz
     twodip.segmentalize(65, fs.max_freq())
     portname = 'VS'
@@ -379,7 +379,7 @@ def test_get_antspats():
     Test of getting the antenna patterns tensor from an EEPdat object
     """
     # Use function to build model of lambda half dipole
-    twodip = two_lamhalfdip()
+    twodip = lamhalfdip_alongZ()
     # Get the port name...
     _dipgrpname = list(twodip.groups.keys()).pop()
     portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
