@@ -735,6 +735,7 @@ class EEPdata:
         antspat_rct = antspats * np.exp(-1j*phs_rct[..., np.newaxis])
         return phs_rct, antspat_rct
     
+    
     def __eq__(self, __value: object) -> bool:
         if self.excite_typ != __value.excite_typ:
             return False
@@ -919,6 +920,21 @@ class EELdata(EEPdata):
     def _get_embedded_elements(self):
         return self.eels
     
+    def lengths(self):
+        """\
+        Compute the scalar lengths of the EEL vectors
+
+        Computes vector norm of complex EEL vectors.
+
+        Returns
+        -------
+        h : ndarray
+            Scalar length. The component-shape is [ant, frq, tht, phi].
+        """
+        antspats = self.get_antspats_arr()
+        h = np.sqrt(np.abs(antspats[..., 0])**2 + np.abs(antspats[..., 1])**2)
+        return h
+
     def area_eff(self):
         """\
         Compute the effective area
