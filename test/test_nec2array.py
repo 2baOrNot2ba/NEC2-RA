@@ -231,14 +231,24 @@ def test_ArrayModel_offcenter():
 
 
 def lamhalfdip_aboveX(rad_lam=None):
+    """
+    StructureModel of lambda/2 dipole placed lambda/4 above and aligned with X
+
+    Lambda is 2 meters.
+    
+    Parameters
+    ----------
+    rad_lam: float
+        Wire radius in lamdba.
+    """
     lamhalf = 1.0
     if rad_lam is None:
         w_radii = 1e-5*2*lamhalf
     else:
         w_radii = rad_lam * 2*lamhalf
     dip_len = lamhalf
-    p1 = (-dip_len/2, 0., 0.5)
-    p2 = (+dip_len/2, 0., 0.5)
+    p1 = (-dip_len/2, 0., lamhalf/2.)
+    p2 = (+dip_len/2, 0., lamhalf/2.)
     l12 = (p1, p2)
     dip = StructureModel('lamhalfdip')
     dip['dip']['X'] = Wire(*l12, w_radii).add_port(0.5,'VS')
@@ -247,10 +257,17 @@ def lamhalfdip_aboveX(rad_lam=None):
     return dip, freq
 
 
-def lamhalfdip_alongZ(rad_lam=1e-5):
+def lamhalfdip_alongZ(w_radii=1e-5):
+    """
+    StructureModel of 1m dipole placed at origin aligned with Z
+    
+    Parameters
+    ----------
+    w_radii: float
+        Wire radius in meters.
+    """
     dip_len = 1.0
     lamhalf = dip_len
-    w_radii = rad_lam*2*lamhalf
     p1 = (0., 0., -dip_len/2)
     p2 = (0., 0., +dip_len/2)
     l12 = (p1, p2)
@@ -277,7 +294,7 @@ def test_loaded_lamhalfdip():
     eepdat_OC = eepdat_SC.transform_to('OC')
     eel_loaded = eepdat_NO.get_EELs()
     eeldat_OC =eepdat_OC.get_EELs()
-    print(eepdat_SC.get_impedances())
+    print('Antenna impedance', eepdat_SC.get_impedances())
     print('EEL 50 Ohms', 3e8/freq/np.pi, np.abs(eeldat_OC.eels[0].f_tht).item())
     print('EEL 50 Ohms', np.abs(eel_loaded.eels[0].f_tht).item())
     print(377*Y_load*(np.abs(eel_loaded.eels[0].f_tht).item())**2)
@@ -318,7 +335,7 @@ def test_Array_2_lamhalfdip_sbys():
     plt.xlabel('Separation [lambda]')
     plt.ylabel('Mutual-impedance [Ohm]')
     plt.title('2 side-by-side half-wave dipoles\n'
-              'simulated with NEC2 '
+              'simulated with NEC2-RA '
               f'(wire radius={w_radii/(2*lamhalf)} lambda)')
     plt.show()
 
@@ -330,7 +347,7 @@ def test_dipole_area():
     Using EELdata().area_eff() for simple dipole one should get a maximum value
     of 0.125 lambda^2, when load impedance is 50 Ohms and for matching polarized
     incident radiation.
-    
+
     Ref: Row 1, Tab. 1, Diao 2017, doi:10.1109/TAP.2016.2632618
     """
     # Use function to build model of lambda half dipole
@@ -447,9 +464,8 @@ test_manual_and_autosegment()
 test_EEL()
 test_SC_OC_transforms()
 test_ArrayModel_offcenter()
-test_loaded_lamhalfdip()
 test_Array_2_lamhalfdip_sbys()
-test_dipole_area()
+test_loaded_lamhalfdip()
 test_tuned_dipole_Array()
+test_dipole_area()
 test_get_antspats()
-
