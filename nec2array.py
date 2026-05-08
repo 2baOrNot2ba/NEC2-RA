@@ -5,7 +5,9 @@ import pathlib
 import numpy as np
 import warnings
 
+C0 = 2.99792458e8  # Speed of light
 MU0 = 4*np.pi*1e-7  # H/m aka vacuum magnetic permeability
+ETA0 = MU0 * C0  # Impedance of free space
 
 PRGINPS = {'STGEOM', 'PCNTRL'}
 CARDS_COMMT = {'CE', 'CM'}
@@ -373,7 +375,7 @@ class FreqSteps:
     start: float = 299.8  # MHz
     incr: float = 1.
 
-    def aslist(self):
+    def aslist(self, MHz=True):
         frqlist = []
         for fi in range(self.nrsteps):
             if self.steptype == 'lin':
@@ -381,6 +383,8 @@ class FreqSteps:
             else:
                 frq = self.start*self.incr**fi
             frqlist.append(frq)
+        if not MHz:
+            frqlist = [_f*1e6 for _f in frqlist]
         return frqlist
 
     def max_freq(self):
@@ -516,19 +520,86 @@ class StructureCurrents:
         return self.currents[self._current_index(tag, seg)]
 
 
+def impedanceRLC(freqs, R, L, C, coupling, imp_not_adm=True):
+    """
+    Compute impedance of a R-L-C circuit
+    
+    Parameters
+    ----------
+    freqs: array
+        Frequencies in Hz.
+    R: float
+        Resistance in Ohms. If not used set to `None`.
+    L: float
+        Inductance in Henries. If not used set to `None`.
+    C: float
+        Capacitance in Farads. If not used set to `None`.
+    coupling: str
+        Circuit coupling of the lumped circuit. Can be 'parallel' or 'series'.
+    imp_not_adm: bool
+        Whether to output responce as a impedance (default), when True,
+        or admittance, when False.
+    
+    Returns
+    -------
+    imp | adm: array
+        Impedance or admittance as of function of the input frequencies.
+    """
+    imp = None
+    adm = None
+    omegas = 2*np.pi*np.asarray(freqs)
+    if coupling=='parallel':
+        Y_R = 0.
+        Y_L = 0.
+        Y_C = 0.
+        if R is not None:
+            Y_R = 1/R * np.ones_like(omegas)
+        if L is not None:
+            Y_L = 1/(1j*omegas*L)
+        if C is not None:
+            Y_C = 1j*omegas*C
+        adm = Y_R + Y_L + Y_C
+    elif coupling=='series':
+        Z_R = 0.
+        Z_L = 0.
+        Z_C = 0.
+        if R is not None:
+            Z_R = R * np.ones_like(omegas)
+        if L is not None:
+            Z_L = 1j*omegas*L
+        if C is not None:
+            Z_C = 1/(1j*omegas*C)
+        imp = Z_R + Z_L + Z_C
+    else:
+        raise ValueError(f"coupling='{coupling}' not valid."
+                          "(try 'parallel' or 'series')")
+    if L and C:
+        print("Resonance frequency is:", 1/np.sqrt(L*C)/(2*np.pi),'Hz')
+    if imp is None and imp_not_adm:
+        imp = 1/adm
+    if adm is None and not imp_not_adm:
+        adm = 1/imp
+    if imp_not_adm:
+        return imp
+    else:
+        return adm
+
+
 class EEPdata:
     """\
     Class for Embedded Element Pattern data
 
     Superclass to EEP_SC, EEP_OC, EEP_NO, EEP_TH and EEL
     """
-    def __init__(self, eeps, adm_or_imp, excite_typ='SC', excite_val=1.0):
+    def __init__(self, eeps, adm_or_imp, excite_typ='SC', adm_or_imp_load=None,
+                 excite_val=1.0):
         self.eeps = eeps  # One NecOut (ie EEP) for each excitation (ie element)
         # 'OC' open-circuit implies current
         # 'SC' short-circuit implies voltage
         self.excite_typ = excite_typ
         self.excite_val = excite_val  # Amplitude
         self.adm_or_imp = adm_or_imp  # admittance if SC, impedance if OC
+        self.adm_or_imp_load = adm_or_imp_load
 
     def get_admittances(self):
         """\
@@ -539,15 +610,19 @@ class EEPdata:
         Admittances has shape (nfrq, nths, nphs, nant, nant)
         """
         if self.excite_typ == 'SC' or self.excite_typ == 'NO':
-            return self.admittances
+            adm = self.adm_or_imp
+            return adm
         elif self.excite_typ == 'OC' or self.excite_typ == 'TH':
-            return np.linalg.inv(self.impedances)  
+            imp = self.adm_or_imp
+            return np.linalg.inv(imp)  
     
     def get_impedances(self):
         if self.excite_typ == 'OC' or self.excite_typ == 'TH':
-            return self.impedances
+            imp = self.adm_or_imp
+            return imp
         elif self.excite_typ == 'SC' or self.excite_typ == 'NO':
-            return np.linalg.inv(self.admittances)
+            adm = self.adm_or_imp
+            return np.linalg.inv(adm)
 
     def _get_embedded_elements(self):
         return self.eeps
@@ -601,6 +676,7 @@ class EEPdata:
         """\
         Calculate Embedded Element Lengths from EEPs
         """
+        adm_or_imp_load = None
         if self.excite_typ == 'SC':
             excite_val = self.voltage_excite
             adm_or_imp = self.admittances
@@ -628,7 +704,7 @@ class EEPdata:
             elif self.excite_typ == 'SC' or self.excite_typ == 'TH':
                 _ee.f_type = 'Length/Impedance'
         eeldata = EELdata(_ees, np.copy(adm_or_imp),
-                          self.excite_typ) 
+                          self.excite_typ, np.copy(adm_or_imp_load))
         antspats = self.get_antspats_arr()
         antspats = 2.j/(MU0*freqs*1e6*excite_val)*antspats  # 1e6 = MHz to Hz
         if self.excite_typ == 'TH':
@@ -637,6 +713,28 @@ class EEPdata:
             antspats = np.moveaxis(antspats.squeeze(-1), [-1], [0])
         eeldata.set_antspat_arr(antspats)
         return eeldata
+    
+    def rectifying_phase(self):
+        """\
+        Compute the rectifying phase
+
+        Calculates the rectifying phase of the complex vector field F
+        using phs=arg(F.F)/2.
+
+        Returns
+        -------
+        phs_rct : ndarray
+            Rectifying phase field. The component-shape is [ant, frq, tht, phi].
+
+        antspats_rct : ndarray
+            Rectified complex vector pattern field.
+            The component-shape is [ant, frq, tht, phi, pol].
+        """
+        antspats = self.get_antspats_arr()
+        phs_rct = np.angle(antspats[..., 0]**2 + antspats[..., 1]**2)/2
+        antspat_rct = antspats * np.exp(-1j*phs_rct[..., np.newaxis])
+        return phs_rct, antspat_rct
+    
     
     def __eq__(self, __value: object) -> bool:
         if self.excite_typ != __value.excite_typ:
@@ -650,13 +748,29 @@ class EEPdata:
 
 class EEP_SC(EEPdata):
     def __init__(self, eep_sc, admittances_arr, voltage_excite=1.0):
-        self.eeps = eep_sc
+        # Set up super, EEPdata, stuff first:
+        super().__init__(eep_sc, admittances_arr, excite_typ='SC',
+                         adm_or_imp_load=None, excite_val=voltage_excite)
+        # Set up EEP_SC specific
         self.admittances = admittances_arr
         self.voltage_excite = voltage_excite
-        self.excite_typ = 'SC'
     
-    def transform_to(self, excite_typ, excite_val=1., imp_load=None,
-                     adm_load=None):
+    def transform_to(self, excite_typ, excite_val=1., adm_load=None):
+        """
+        Transform this SC EEP to OC or NO
+        
+        Parameters
+        ----------
+        excite_typ: str
+            Excitation type to transform to; can be: 'OC' or 'NO'.
+        excite_val: float
+            Value of the excitation voltage or current
+        adm_load: array
+            Load admittance for transform to 'NO', in Mhos.
+            `None` (default) for transform to 'OC'.
+            If your is given as an impedance instead of an admittance,
+            the set this argument to 1/impedance. 
+        """
         if excite_typ == self.excite_typ:
             return deepcopy(self)
         # _ee is placeholder var: gets overwritten before returning when
@@ -677,21 +791,22 @@ class EEP_SC(EEPdata):
         #           imp_arr[freqs, np.newaxis, newaxis, np.newaxis, ants, ants]
         #       after expanding the axes 1,2,3:
             _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
-
             # Warnick2021 eq. 7
             antspat_tr = _imp_arr_ext @ ap_SC_0
-
+        elif excite_typ == 'TH':
+            raise NotImplementedError('Transform from SC -> TH not implemented')
         elif excite_typ == 'NO':
-            if adm_load is None and imp_load is not None:
-                adm_load = np.linalg.inv(imp_load)
-            adm_arr = self.get_admittances()
+            if np.isscalar(adm_load):
+                adm_load = adm_load*np.identity(imp_arr.shape[-1])
+            elif adm_load.ndim == 1:
+                adm_load = (np.expand_dims(adm_load, axis=(1,2,3,4,5))
+                            * np.identity(imp_arr.shape[-1]))
             # Create new EEP_NO object to hold results to be return:ed
-            eepdat_tr = EEP_NO(_ee, np.copy(adm_arr), adm_load, excite_val)
+            adm_arr = np.copy(self.get_admittances())
+            eepdat_tr = EEP_NO(_ee, adm_arr, adm_load, excite_val)
             _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
-
             # Warnick2021 eq. 6
             antspat_tr = np.linalg.inv(adm_load + _adm_arr_ext) @ ap_SC_0
-
         antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
         eepdat_tr.set_antspat_arr(antspat_tr)
         return eepdat_tr
@@ -699,10 +814,11 @@ class EEP_SC(EEPdata):
 
 class EEP_OC(EEPdata):
     def __init__(self, eep_oc, impedances_arr, current_excite=1.0):
-        self.eeps = eep_oc
+        # Set up super, EEPdata, stuff:
+        super().__init__(eep_oc, impedances_arr, excite_typ='OC',
+                         adm_or_imp_load=None, excite_val=current_excite)
         self.impedances = impedances_arr
         self.current_excite = current_excite
-        self.excite_typ = 'OC'
     
     def transform_to(self, excite_typ, excite_val=1., imp_load=None):
         if excite_typ == self.excite_typ:
@@ -715,18 +831,16 @@ class EEP_OC(EEPdata):
             adm_arr = np.copy(self.get_admittances())
             eepdat_tr = EEP_SC(_ee, adm_arr, excite_val)
             _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
-
             # Warnick2021 eq. 7
             antspat_tr = _adm_arr_ext @ ap_OC_0
-
         elif excite_typ == 'TH':
             imp_arr = np.copy(self.get_impedances())
+            if np.isscalar(imp_load):
+                imp_load = imp_load*np.identity(imp_arr.shape[-1])
             eepdat_tr = EEP_TH(_ee, imp_arr, imp_load, excite_val)
             _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
-
             # Warnick2021 eq. 4
             antspat_tr = np.linalg.inv(imp_load + _imp_arr_ext) @ ap_OC_0
-
         elif excite_typ == 'NO':
             raise NotImplementedError('Transform from OC -> NO not implemented')
         antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
@@ -735,12 +849,13 @@ class EEP_OC(EEPdata):
 
 
 class EEP_NO(EEPdata):
-    def __init__(self, eep_th, adm_arr, adm_load, current_excite=1.0):
-        self.eeps = eep_th
+    def __init__(self, eep_no, adm_arr, adm_load, current_excite=1.0):
+        # Set up super, EEPdata, stuff:
+        super().__init__(eep_no, adm_arr, excite_typ='NO',
+                         adm_or_imp_load=adm_load, excite_val=current_excite)
         self.admittances = adm_arr
         self.adm_load = adm_load
         self.current_excite = current_excite
-        self.excite_typ = 'NO'
 
     def transform_to(self, excite_typ, excite_val=1.):
         if excite_typ == self.excite_typ:
@@ -753,10 +868,8 @@ class EEP_NO(EEPdata):
         if excite_typ == 'SC':
             eepdat_tr = EEP_SC(_ee, np.copy(adm_arr), excite_val)
             _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
-
             # Warnick2021 eq. 6
             antspat_tr = np.linalg.inv(self.adm_load + _adm_arr_ext) @ ap_NO_0
-
         elif excite_typ == 'OC':
             raise NotImplementedError('Transform from NO -> OC not implemented')
         elif excite_typ == 'TH':
@@ -768,11 +881,12 @@ class EEP_NO(EEPdata):
 
 class EEP_TH(EEPdata):
     def __init__(self, eep_th, imp_arr, imp_load, voltage_excite=1.0):
-        self.eeps = eep_th
+        # Set up super, EEPdata, stuff:
+        super().__init__(eep_th, imp_arr, excite_typ='TH',
+                         adm_or_imp_load=imp_load, excite_val=voltage_excite)
         self.impedances = imp_arr
         self.imp_load = imp_load
         self.voltage_excite = voltage_excite
-        self.excite_typ = 'TH'
 
     def transform_to(self, excite_typ, excite_val=1.):
         if excite_typ == self.excite_typ:
@@ -787,10 +901,8 @@ class EEP_TH(EEPdata):
         elif excite_typ == 'OC':
             eepdat_tr = EEP_OC(_ee, np.copy(imp_arr), excite_val)
             _imp_arr_ext = np.expand_dims(imp_arr, axis=(1,2,3))
-
             # Warnick2021 eq. 4
             antspat_tr = (self.imp_load + _imp_arr_ext) @ ap_TH_0
-
         elif excite_typ == 'NO':
             raise NotImplementedError('Transform from TH -> NO not implemented')
         antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
@@ -798,15 +910,65 @@ class EEP_TH(EEPdata):
         return eepdat_tr
     
 
-
 class EELdata(EEPdata):
-    def __init__(self, eels, adm_or_imp, excite_typ):
+    def __init__(self, eels, adm_or_imp, excite_typ=None, adm_or_imp_load=None):
         self.eels = eels
         self.adm_or_imp = adm_or_imp
         self.excite_typ = excite_typ
+        self.adm_or_imp_load = adm_or_imp_load
 
     def _get_embedded_elements(self):
         return self.eels
+    
+    def lengths(self):
+        """\
+        Compute the scalar lengths of the EEL vectors
+
+        Computes vector norm of complex EEL vectors.
+
+        Returns
+        -------
+        h : ndarray
+            Scalar length. The component-shape is [ant, frq, tht, phi].
+        """
+        antspats = self.get_antspats_arr()
+        h = np.sqrt(np.abs(antspats[..., 0])**2 + np.abs(antspats[..., 1])**2)
+        return h
+
+    def area_eff(self):
+        """\
+        Compute the effective area
+
+        Returns
+        -------
+        area_effs : array
+            Effective area with the same shape as the self.eels
+        """
+        if self.excite_typ != 'TH' and self.excite_typ != 'NO':
+            raise NotImplementedError(
+                f'Excite type is {self.excite_typ} but only TH and NO loading')
+        area_effs = []
+        load_adm_or_imp = self.adm_or_imp_load
+        if load_adm_or_imp.ndim == 2:
+            load_adm_or_imp_ = np.diagonal(self.adm_or_imp_load,
+                                           axis1=-2, axis2=-1)
+        else:
+            load_adm_or_imp_ = np.squeeze(
+                np.moveaxis(
+                    np.diagonal(self.adm_or_imp_load, axis1=-2, axis2=-1),
+                -1, 0),
+            -1)
+        for eel, aoi_l in zip(self.eels, load_adm_or_imp_):
+            a_e_cmplx_un = ETA0 / 2 * (np.abs(eel.f_tht)**2
+                                       +np.abs(eel.f_phi)**2)
+            if self.excite_typ == 'TH':
+                a_e_cmplx = 1/aoi_l * a_e_cmplx_un
+            elif self.excite_typ == 'NO':
+                a_e_cmplx = aoi_l * a_e_cmplx_un
+            a_e = np.real(a_e_cmplx)
+            area_effs.append(a_e)
+        area_effs = np.asarray(area_effs)
+        return area_effs
 
 
 class TaggedGroup:
@@ -1170,13 +1332,16 @@ class StructureModel:
             for nec_context in _deck.exec_pynec():
                 ef_vert = []
                 ef_hori = []
+                voltages = []
+                currents = []
+                impedances = []
                 for f in range(len(freqs)):
                     # Input (excitation) parameters
                     inp_parms = nec_context.get_input_parameters(f)
                     # ##frequency = inp_parms.get_frequency()
-                    Z = inp_parms.get_impedance()
-                    I = inp_parms.get_current()
-                    V = inp_parms.get_voltage()
+                    voltages.append(inp_parms.get_voltage())
+                    currents.append(inp_parms.get_current())
+                    impedances.append(inp_parms.get_impedance())
 
                     # Radiation pattern
                     radpat_out = nec_context.get_radiation_pattern(f)
@@ -1198,13 +1363,16 @@ class StructureModel:
                         thetas = None
                         phis = None
                 necout = NECout(freqs, thetas, phis, np.array(ef_vert),
-                                 np.array(ef_hori), inp_V=V, inp_I=I, inp_Z=Z)
+                                np.array(ef_hori), inp_V=np.array(voltages),
+                                inp_I=np.array(currents),
+                                inp_Z=np.array(impedances))
             return necout, nec_context
 
-    def calc_eep_SC(self, eb, save_necfile=False):
+    def calc_eep_SC(self, eb, ref_port_nr=0, save_necfile=False):
             necout, _ = self.get_necout(eb, save_necfile)
-            eep_sc = EEP_SC([necout], np.atleast_2d(1/necout.inp_Z),
-                             eb.exciteports[0][1].value)
+            # Use impedance of excited reference port number ref_port_nr
+            adm = 1/necout.inp_Z[:, ref_port_nr, np.newaxis, np.newaxis]
+            eep_sc = EEP_SC([necout], adm, eb.exciteports[ref_port_nr][1].value)
             return eep_sc
 
     def __getitem__(self, group_id):

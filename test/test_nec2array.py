@@ -3,7 +3,7 @@ from io import StringIO
 import numpy as np
 import matplotlib.pyplot as plt
 from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
-                  FreqSteps, ExecutionBlock, RadPatternSpec)
+                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC)
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -112,7 +112,7 @@ def test_manual_and_autosegment():
     model['dip']['Z+'] = Wire(*l12, wire_rad)
     model['dip']['Z-'] = Wire(*l23, wire_rad)
     model['dip']['Z-'].add_port(0.0, 'VS')
-    eb = ExecutionBlock(None, [('VS', VoltageSource(1.0))])
+    eb = ExecutionBlock(fs, [('VS', VoltageSource(1.0))])
     #  Segmentalize manually
     model['dip']['Z+'].nr_seg = 20
     model['dip']['Z-'].nr_seg = 80
@@ -123,8 +123,12 @@ def test_manual_and_autosegment():
           'Excitation is on seg nr 21:', model['dip']['Z-'].port.ex_seg == 21)
     segsperwavelen = 2*100
     model.segmentalize(segsperwavelen, fs.max_freq())
+    modelseglamlens = model.seglamlens()
+    # As per previous comment 
     d = model.as_neccards()
-    print(f'Using segmentalize() with {segsperwavelen/2} seg / lambda/2'
+    print(f'Using segmentalize() with {segsperwavelen} seg/lambda '
+          f'(ie {1/segsperwavelen} lam/seg) '
+          f'Achieved lam/seg: {modelseglamlens}\n'
           'Excitation is on seg nr 51:', model['dip']['Z-'].port.ex_seg==51)
 
 
@@ -156,14 +160,15 @@ def test_EEL():
     ex_port = (port_name, VoltageSource(1.0))
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, [ex_port], rps)
-    eepdat = abradip.calc_eep_SC(eb, True)
+    eepdat = abradip.calc_eep_SC(eb)
     eeldat_OC = eepdat.transform_to('OC').get_EELs()
     eeldat= eepdat.get_EELs()
     Hsc_abs = np.sqrt(np.abs(eeldat.eels[0].f_tht)**2
                   +np.abs(eeldat.eels[0].f_phi)**2)
+    _phs_rct, f_rct = eeldat_OC.rectifying_phase()
+    print('Peak linear length:', np.linalg.norm(np.real(f_rct)),'m')
     efflen_theory = abradip['dip']['Z'].length()/2.0
     efflen_simult = Hsc_abs*np.abs(eeldat.eels[0].inp_Z)
-
     print(eeldat_OC.eels[0].f_tht, np.abs(eeldat.eels[0].inp_Z), Hsc_abs)
     print('Effective length for Abraham dipole...',
           'Simulated:', np.ndarray.item(efflen_simult),
@@ -188,7 +193,9 @@ def test_SC_OC_transforms():
     print("EELs. Should be False:", eel_SC2 == eel_SC)
     print("EELs. Should be True:", eel_OC_SC == eel_SC)
     # Thevenin
-    eep_NO = eep_SC.transform_to('NO', adm_load=1/50. * np.identity(1))
+    load_adm = impedanceRLC(fs.aslist(), 50., None, 1e-12, 'parallel', False)
+    print('LOAD',1/load_adm)
+    eep_NO = eep_SC.transform_to('NO', adm_load=load_adm)
     eel_NO = eep_NO.get_EELs()
     print(eel_SC.eels)
     print(eel_NO.eels)
@@ -223,15 +230,25 @@ def test_ArrayModel_offcenter():
     print(_relangs)
 
 
-def lamhalfdip(rad_lam=None):
+def lamhalfdip_aboveX(rad_lam=None):
+    """
+    StructureModel of lambda/2 dipole placed lambda/4 above and aligned with X
+
+    Lambda is 2 meters.
+    
+    Parameters
+    ----------
+    rad_lam: float
+        Wire radius in lamdba.
+    """
     lamhalf = 1.0
     if rad_lam is None:
         w_radii = 1e-5*2*lamhalf
     else:
         w_radii = rad_lam * 2*lamhalf
     dip_len = lamhalf
-    p1 = (-dip_len/2, 0., 0.5)
-    p2 = (+dip_len/2, 0., 0.5)
+    p1 = (-dip_len/2, 0., lamhalf/2.)
+    p2 = (+dip_len/2, 0., lamhalf/2.)
     l12 = (p1, p2)
     dip = StructureModel('lamhalfdip')
     dip['dip']['X'] = Wire(*l12, w_radii).add_port(0.5,'VS')
@@ -240,11 +257,30 @@ def lamhalfdip(rad_lam=None):
     return dip, freq
 
 
+def lamhalfdip_alongZ(w_radii=1e-5):
+    """
+    StructureModel of 1m dipole placed at origin aligned with Z
+    
+    Parameters
+    ----------
+    w_radii: float
+        Wire radius in meters.
+    """
+    dip_len = 1.0
+    lamhalf = dip_len
+    p1 = (0., 0., -dip_len/2)
+    p2 = (0., 0., +dip_len/2)
+    l12 = (p1, p2)
+    zdip = ArrayModel('Zdip_sbs')
+    zdip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5, 'VS')
+    return zdip
+
+
 def test_loaded_lamhalfdip():
     """\
     Test loading of fat dipole over ground (uses extended thin wire kernel)
     """
-    dip_fat, freq = lamhalfdip(0.01)
+    dip_fat, freq = lamhalfdip_aboveX(0.01)
     dip_fat.set_ground()  # Default is a PEC ground in Z=0 plane.
     fs = FreqSteps('lin', 1, freq/1e6)  # MHz
     rps = RadPatternSpec(nth=1, thets=90., nph=0, phis=0.)
@@ -258,22 +294,10 @@ def test_loaded_lamhalfdip():
     eepdat_OC = eepdat_SC.transform_to('OC')
     eel_loaded = eepdat_NO.get_EELs()
     eeldat_OC =eepdat_OC.get_EELs()
-    print(eepdat_SC.get_impedances())
+    print('Antenna impedance', eepdat_SC.get_impedances())
     print('EEL 50 Ohms', 3e8/freq/np.pi, np.abs(eeldat_OC.eels[0].f_tht).item())
     print('EEL 50 Ohms', np.abs(eel_loaded.eels[0].f_tht).item())
     print(377*Y_load*(np.abs(eel_loaded.eels[0].f_tht).item())**2)
-
-
-def two_lamhalfdip():
-    lamhalf = 1.0
-    w_radii = 1e-5*2*lamhalf
-    dip_len = lamhalf
-    p1 = (0., 0., -dip_len/2)
-    p2 = (0., 0., +dip_len/2)
-    l12 = (p1, p2)
-    twodip = ArrayModel('2dip_sbs')
-    twodip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
-    return twodip
 
 
 def test_Array_2_lamhalfdip_sbys():
@@ -283,7 +307,7 @@ def test_Array_2_lamhalfdip_sbys():
     See Balanis Antenna Theory 2016, Fig 8.21
     """
     # Use function to build model of lambda half dipole
-    twodip = two_lamhalfdip()
+    twodip = lamhalfdip_alongZ()
     # Get the port name...
     _dipgrpname = list(twodip.groups.keys()).pop()
     portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
@@ -311,16 +335,101 @@ def test_Array_2_lamhalfdip_sbys():
     plt.xlabel('Separation [lambda]')
     plt.ylabel('Mutual-impedance [Ohm]')
     plt.title('2 side-by-side half-wave dipoles\n'
-              'simulated with NEC2 '
+              'simulated with NEC2-RA '
               f'(wire radius={w_radii/(2*lamhalf)} lambda)')
     plt.show()
+
+
+def test_dipole_area():
+    """
+    Test effective area calculation applied to a linear dipole
+
+    Using EELdata().area_eff() for simple dipole one should get a maximum value
+    of 0.125 lambda^2, when load impedance is 50 Ohms and for matching polarized
+    incident radiation.
+
+    Ref: Row 1, Tab. 1, Diao 2017, doi:10.1109/TAP.2016.2632618
+    """
+    # Use function to build model of lambda half dipole
+    twodip = lamhalfdip_alongZ()
+    fs = FreqSteps('lin', 80, 120., 0.5)  # MHz
+    twodip.segmentalize(201, fs.max_freq())
+    portname = 'VS'
+    ex_port = (portname, VoltageSource(1.0))
+    arr_pos = [[0.,0.,0.]]
+    twodip.arrayify(element=['dip'], array_positions=arr_pos)
+    rps = RadPatternSpec(nth=1, dth=1., thets=90., phis=0.)
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
+    load_adm = impedanceRLC(fs.aslist(False), 50.-0.0j, None, None, 'parallel', False)
+    eepNO = eepdat.transform_to('NO', adm_load=load_adm)
+    a_NO = eepNO.get_EELs().area_eff()
+    ant_nr = 0
+    lam = 3e8/np.asarray(fs.aslist(False))
+    _n = a_NO[ant_nr, :].squeeze(axis=(-2,-1))
+    ant_len =twodip['dip'].total_length()
+    _lammaxi = np.argmax(_n)
+    print('For linear 50 Ohm loaded dipole and matched incident polarization:')
+    print('    max Eff. Area:', np.round(2*_n[_lammaxi]/(lam[_lammaxi]**2), 3),
+          '(should be = 0.125 lam², factor 2 > unpolarized)')
+
+
+def test_tuned_dipole_Array():
+    """
+    Test array of dipoles with tuned (pass-band LC) loads
+
+    Same array as in test_Array_2_lamhalfdip_sbys() but with parallel
+    LC circuit. Tuned circuit, a parallel LC load, has a resonance at ~80MHz,
+    and the effective area spectrum should exhibit a peak at 80MHz in this test.
+    """
+    # Use function to build model of lambda half dipole
+    twodip = lamhalfdip_alongZ()
+    fs = FreqSteps('lin', 80, 70., 0.25)  # MHz
+    twodip.segmentalize(65, fs.max_freq())
+    portname = 'VS'
+    ex_port = (portname, VoltageSource(1.0))
+    arr_pos = [[0.,0.,0.], [50., 0., 0.]]
+    twodip.arrayify(element=['dip'], array_positions=arr_pos)
+    rps = RadPatternSpec(nth=1, dth=1., thets=90., phis=0.)
+    #rps = None
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
+
+    #load_adm = impedanceRLC(fs.aslist(False), 75.-0.0j, None, None, 'parallel', False)
+    # Use FreqSteps.aslist(False) to get frequencies in Hertz rather than MHz.
+    load_adm = impedanceRLC(fs.aslist(False), R=1000., L=20e-9, C=198e-12, coupling='parallel', imp_not_adm=False)
+
+    eepNO = eepdat.transform_to('NO', adm_load=load_adm)
+    a_NO = eepNO.get_EELs().area_eff()
+    ant_nr = 0  # Check
+    a = np.diagonal(eepdat.get_impedances(), axis1=-2, axis2=-1)[..., ant_nr]
+    b = 1/load_adm
+
+    plt.plot(fs.aslist(), np.real(a), 'b')
+    plt.plot(fs.aslist(), np.imag(a), 'r')
+    plt.plot(fs.aslist(), np.real(b), 'b.-')
+    plt.plot(fs.aslist(), np.imag(b), 'r.-')
+    plt.grid()
+    plt.xlabel('Freq. [MHz]')
+    plt.ylabel('Impedance [Ohm]')
+    plt.title('Tuned circuit')
+    plt.legend(['Ant. imp., Re', 'Ant. imp., Im',
+                'Load imp., Re', 'Load imp., Im'])
+    plt.show()
+    _n = a_NO[ant_nr, :].squeeze()
+    plt.plot(fs.aslist(), _n,'k')
+    plt.grid()
+    print('Max eff. area:', np.max(_n),'m^2')
+    plt.xlabel('Freq. [MHz]')
+    plt.ylabel('Area eff [m^2]')
+    plt.title('Resonance in eff area for tuned dipole')
+    plt.show()
+
 
 def test_get_antspats():
     """
     Test of getting the antenna patterns tensor from an EEPdat object
     """
     # Use function to build model of lambda half dipole
-    twodip = two_lamhalfdip()
+    twodip = lamhalfdip_alongZ()
     # Get the port name...
     _dipgrpname = list(twodip.groups.keys()).pop()
     portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
@@ -355,7 +464,8 @@ test_manual_and_autosegment()
 test_EEL()
 test_SC_OC_transforms()
 test_ArrayModel_offcenter()
-test_loaded_lamhalfdip()
 test_Array_2_lamhalfdip_sbys()
+test_loaded_lamhalfdip()
+test_tuned_dipole_Array()
+test_dipole_area()
 test_get_antspats()
-
