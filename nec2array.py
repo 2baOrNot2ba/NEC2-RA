@@ -307,6 +307,9 @@ class Deck:
                     parm = ntype(0)
                 parmstr = f"{parm:>{nrcols}{nfmt}}"
                 line += parmstr
+                if nfmt == 'g' or nfmt == 'e':
+                    # For floats add extra space to give CSV-type compatibility 
+                    parmstr = f" {parm: {nrcols-1}.3{nfmt}}"
             lines.append(line)
         _str = '\n'.join(lines) + '\n'
         return _str
