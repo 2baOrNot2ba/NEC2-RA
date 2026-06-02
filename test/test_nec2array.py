@@ -3,7 +3,7 @@ from io import StringIO
 import numpy as np
 import matplotlib.pyplot as plt
 from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
-                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC)
+                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC, calc_steering_vector)
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -201,35 +201,6 @@ def test_SC_OC_transforms():
     print(eel_NO.eels)
 
 
-def test_ArrayModel_offcenter():
-    lamhalf = 1.0
-    w_radii = 1e-5*2*lamhalf
-    dip_len = lamhalf
-    p1 = (-dip_len/2, 0., 0.)
-    p2 = (+dip_len/2, 0., 0.)
-    l12 = (p1, p2)
-    offcnt = ArrayModel('Off_Center')
-    offcnt['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5,'VS')
-    fs = FreqSteps('lin', 1, 3e8/(10*2*lamhalf)/1e6)  # MHz
-    offcnt.segmentalize(65, fs.max_freq())
-    ex_port = ('VS', VoltageSource(1.0))
-    rps = RadPatternSpec(nth=3, dth=10., nph=2*2, phis=90.0, dph=45.)
-    arr_pos = [[10., 21., 15.]]
-    offcnt.arrayify(element=['dip'], array_positions=arr_pos)
-    eb = ExecutionBlock(fs, ex_port, rps)
-    eepdat = offcnt.excite_1by1(eb, save_necfile=True)
-    sv = offcnt.calc_steering_vector(eb)
-    ant_nr = 0
-    frq_nr = 0
-    print('Steering vector phases:')
-    ref_ampphs0 = np.conj(sv[ant_nr, frq_nr,0,0])
-    print(np.angle(sv[ant_nr, frq_nr]*ref_ampphs0, deg=True))
-    ref_ampphs = np.conj(eepdat.eeps[ant_nr].f_phi[frq_nr][0,0])
-    _relangs = np.angle(eepdat.eeps[ant_nr].f_phi[frq_nr]*ref_ampphs, deg=True)
-    print('Field phase rel. theta=0.')
-    print(_relangs)
-
-
 def lamhalfdip_aboveX(rad_lam=None):
     """
     StructureModel of lambda/2 dipole placed lambda/4 above and aligned with X
@@ -274,6 +245,28 @@ def lamhalfdip_alongZ(w_radii=1e-5):
     zdip = ArrayModel('Zdip_sbs')
     zdip['dip']['Z'] = Wire(*l12, w_radii).add_port(0.5, 'VS')
     return zdip
+
+
+def test_ArrayModel_offcenter():
+    """
+    Offset antenna positions using ArrayModel and compare pattern phases with steering vector
+    """
+    offcnt = lamhalfdip_alongZ()
+    fs = FreqSteps('lin', 1, 3e8 / (10 * 1.0) / 1e6)  # MHz
+    # lam = 300/fs.aslist()[0]  # is 10.0m
+    offcnt.segmentalize(65, fs.max_freq())
+    ex_port = ('VS', VoltageSource(1.0))
+    rps = RadPatternSpec(thets=45.0, nth=3, dth=15., nph=2 * 2 * 1, phis=0.0, dph=90.)
+    arr_pos = [[4, -1, 2]]  # norm is 4.6m
+    offcnt.arrayify(element=['dip'], array_positions=arr_pos)
+    eb = ExecutionBlock(fs, ex_port, rps)
+    eepdat = offcnt.excite_1by1(eb, save_necfile=True)
+    sv = calc_steering_vector(arr_pos, eb)
+    ant_nr = 0
+    frq_nr = 0
+    print('Phase diff between steering vector and field less than one degree:',
+          np.allclose(np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr] * np.conj(sv[ant_nr, frq_nr]), deg=True), 0.,
+                      atol=1e0))
 
 
 def test_loaded_lamhalfdip():
