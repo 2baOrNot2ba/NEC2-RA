@@ -737,8 +737,7 @@ class EEPdata:
         phs_rct = np.angle(antspats[..., 0]**2 + antspats[..., 1]**2)/2
         antspat_rct = antspats * np.exp(-1j*phs_rct[..., np.newaxis])
         return phs_rct, antspat_rct
-    
-    
+
     def __eq__(self, __value: object) -> bool:
         if self.excite_typ != __value.excite_typ:
             return False
@@ -1609,25 +1608,33 @@ class ArrayModel(StructureModel):
         results = EEP_SC(_eep_sc, _admittances, _vltsrc.value)
         return results
 
-    def calc_steering_vector(self, eep_eb):
-        """Calculate steering vector for array
 
-        Returns
-        -------
-        steering_vectors : (nant, nfr, nth, nph) shaped array
-            Steering vectors, i.e. the vector [exp(j*k_i*r_{la})].T
-            for wavevector k_i (given by direction cosines times wavenumber)
-            and the position vector r_l for all antennas a.
-        """
-        khat = eep_eb.radpat.as_khat()
-        pos = self.arr_delta2arr_pos(self.arr_delta_pos)
-        pos = np.array(pos)  # pos.shape = (nant, xyz)
-        phases_hat = np.matmul(khat, pos.T)  # khat[nth,nph,xyz] pos[nant,xyz]
-                                            # phase_hat.shape = (nth, nph, nant)
-        _freqs = eep_eb.freqsteps.aslist()
-        k = 2*np.pi/3e2*np.array(_freqs)  # k=2pi*freq/c, shape = (nfrq,)
-        phases = k[:, np.newaxis, np.newaxis, np.newaxis] * phases_hat
-        steering_vectors = np.exp(+1j*phases)  # sv[nfrq,nth,nph,nant]
-        steering_vectors = np.moveaxis(steering_vectors, -1, 0)
-        return steering_vectors
+def calc_steering_vector(pos, eep_eb):
+    """Calculate steering vector for array
 
+    Parameters
+    ----------
+    pos : array_like
+        Position vector array with shape (nant, xyz).
+    eep_eb : ExecutionBlock
+        ExecutionBlock object specifying directions and frequencies desired.
+
+    Returns
+    -------
+    steering_vectors : (nant, nfr, nth, nph) shaped array
+        Steering vectors, i.e. the vector [exp(j*k_i*r_{la})].T
+        for wavevector k_i (given by direction cosines times wavenumber)
+        and the position vector r_l for all antennas a.
+    """
+    khat = eep_eb.radpat.as_khat()
+    #pos = self.arr_delta2arr_pos(self.arr_delta_pos)
+    pos = np.array(pos)
+    phases_hat = np.matmul(khat, pos.T)  # khat[nth,nph,xyz] pos[nant,xyz]
+                                        # phase_hat.shape = (nth, nph, nant)
+    _freqs = eep_eb.freqsteps.aslist()
+    # Note that _freqs is in units MHz
+    k = +2*np.pi/3e8*np.array(_freqs)*1e6  # k=2pi*freq/c, shape = (nfrq,)
+    phases = k[:, np.newaxis, np.newaxis, np.newaxis] * phases_hat
+    steering_vectors = -1*np.exp(+1j*phases)  # sv[nfrq,nth,nph,nant]
+    steering_vectors = np.moveaxis(steering_vectors, -1, 0)
+    return steering_vectors
