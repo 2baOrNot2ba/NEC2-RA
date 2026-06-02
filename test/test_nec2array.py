@@ -1,6 +1,8 @@
 import sys
 from io import StringIO
 import numpy as np
+#import matplotlib
+#matplotlib.use('QtAgg')  # Avoids "RuntimeError: Invalid DISPLAY variable" when running tests in headless environment.
 import matplotlib.pyplot as plt
 from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
                   FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC, calc_steering_vector)
@@ -14,7 +16,7 @@ def test_Deck():
     Examples
     --------
     >>> test_Deck()
-    True
+    Q: Decks() are the same? A: True
     """
     d = Deck()
     d.append_card('GW', 0, 7, 0., 0., -.25, 0., 0., .25, 1.0E-5)
@@ -25,7 +27,7 @@ def test_Deck():
                ('GE', 0),
                ('EX', 0, 0, 4, 0, 1.0),
                ('EN',)])
-    print('Decks() are the same?', d==d2)
+    print('Q: Decks() are the same? A:', d==d2)
 
 
 def test_Deck_load_necfile():
