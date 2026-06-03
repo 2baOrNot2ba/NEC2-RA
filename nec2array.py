@@ -633,6 +633,7 @@ class EEPdata:
         self.excite_val = excite_val  # Amplitude
         self.adm_or_imp = adm_or_imp  # admittance if SC, impedance if OC
         self.adm_or_imp_load = adm_or_imp_load
+        self.pattern_centers = None
 
     def get_admittances(self):
         """\
@@ -747,6 +748,32 @@ class EEPdata:
         eeldata.set_antspat_arr(antspats)
         return eeldata
     
+    def recenter_patterns(self, positions):
+        """\
+        Rereference the EEPs to new pattern centers given by `positions`
+
+        Parameters
+        ----------
+        positions: array_like
+            The new pattern centers in cartesian coordinates.
+            The shape is (nant, 3) where nant is the number of antennas or
+            (3,) if all antennas should be shifted to the same position.
+        """
+        if positions is None:
+            positions = np.zeros(3)
+        # Get the old pattern centers from the EEPs
+        pattern_centers = self.pattern_centers
+        if pattern_centers is None:
+            pattern_centers = np.zeros_like(positions)
+        shift_vecs = positions - pattern_centers
+        # Apply the shift to the EEPs by multiplying with exp(-jkhat.rshift)
+        _eb = ExecutionBlock(freqsteps=self.eeps[0].as_FreqSteps(),
+                             radpat=self.eeps[0].as_RadPatternSpec())
+        sv = calc_steering_vector(shift_vecs, _eb)
+        antspats_reref = self.get_antspats_arr() * np.conj(sv[..., np.newaxis])
+        self.set_antspat_arr(antspats_reref)
+        self.pattern_centers = positions
+
     def rectifying_phase(self):
         """\
         Compute the rectifying phase
