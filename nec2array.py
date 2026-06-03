@@ -494,6 +494,36 @@ class NECout:
     inp_I: complex = None
     inp_Z: complex = None
 
+    def as_FreqSteps(self):
+        freqs = np.array(self.freqs)
+        if len(freqs) == 1:
+            steptype = 'lin'
+            nrsteps = 1
+            start = freqs[0]
+            incr = 0.
+        else:
+            incrs = np.diff(freqs)
+            if np.allclose(incrs, incrs[0]):
+                steptype = 'lin'
+                nrsteps = len(freqs)
+                start = freqs[0]
+                incr = incrs[0]
+            else:
+                steptype = 'exp'
+                nrsteps = len(freqs)
+                start = freqs[0]
+                incr = freqs[1]/freqs[0]
+        return FreqSteps(steptype, nrsteps, start, incr)
+    
+    def as_RadPatternSpec(self):
+        nth = len(self.thetas)
+        nph = len(self.phis)
+        thets = self.thetas[0] if nth > 0 else 0.
+        phis = self.phis[0] if nph > 0 else 0.
+        dth = self.thetas[1]-self.thetas[0] if nth > 1 else 0.
+        dph = self.phis[1]-self.phis[0] if nph > 1 else 0.
+        return RadPatternSpec(0, nth, nph, 1000, thets, phis, dth, dph)
+
 
 class StructureCurrents:
     def __init__(self, freqs, nr_ants):
