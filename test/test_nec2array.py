@@ -263,7 +263,6 @@ def test_ArrayModel_offcenter():
     offcnt.arrayify(element=['dip'], array_positions=arr_pos)
     eb = ExecutionBlock(fs, ex_port, rps)
     eepdat = offcnt.excite_1by1(eb, save_necfile=True)
-    sv = calc_steering_vector(arr_pos, eb)
     ant_nr = 0
     frq_nr = 0
     eepdat.recenter_patterns(positions=arr_pos)   
