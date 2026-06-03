@@ -266,8 +266,9 @@ def test_ArrayModel_offcenter():
     sv = calc_steering_vector(arr_pos, eb)
     ant_nr = 0
     frq_nr = 0
-    print('Phase diff between steering vector and field less than one degree:',
-          np.allclose(np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr] * np.conj(sv[ant_nr, frq_nr]), deg=True), 0.,
+    eepdat.recenter_patterns(positions=arr_pos)   
+    print('EEPs recentered from origin to ant pos should have phase < 1 deg:',
+          np.allclose(np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr],deg=True), 0.,
                       atol=1e0))
 
 
