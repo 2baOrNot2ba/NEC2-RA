@@ -1478,6 +1478,30 @@ class ArrayModel(StructureModel):
         self.elements_tags = [[]]  # Map element nr to its tags 
         self.excited_elements = []
         self._last_elem_tag_nr = self._last_base_tag_nr
+    
+    @classmethod
+    def from_structuremodel(cls, sm):
+        """Create ArrayModel from StructureModel
+        
+        Parameters
+        ----------
+        sm : StructureModel
+            The StructureModel to convert
+
+        Returns
+        -------
+        arr_model : ArrayModel
+            The created ArrayModel
+        """
+
+        #Copy all attributes of StructureModel & init ArrayModel specific ones
+        arr_model = cls(sm.name+'_array')
+        arr_model.groups = sm.groups
+        arr_model.executionblocks = sm.executionblocks
+        arr_model.comments = sm.comments
+        arr_model.ground = sm.ground
+        arr_model._last_base_tag_nr = sm._last_base_tag_nr
+        return arr_model
 
     def _assign_tags_base(self):
         """\
