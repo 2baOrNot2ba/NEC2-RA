@@ -494,6 +494,36 @@ class NECout:
     inp_I: complex = None
     inp_Z: complex = None
 
+    def as_FreqSteps(self):
+        freqs = np.array(self.freqs)
+        if len(freqs) == 1:
+            steptype = 'lin'
+            nrsteps = 1
+            start = freqs[0]
+            incr = 0.
+        else:
+            incrs = np.diff(freqs)
+            if np.allclose(incrs, incrs[0]):
+                steptype = 'lin'
+                nrsteps = len(freqs)
+                start = freqs[0]
+                incr = incrs[0]
+            else:
+                steptype = 'exp'
+                nrsteps = len(freqs)
+                start = freqs[0]
+                incr = freqs[1]/freqs[0]
+        return FreqSteps(steptype, nrsteps, start, incr)
+    
+    def as_RadPatternSpec(self):
+        nth = len(self.thetas)
+        nph = len(self.phis)
+        thets = self.thetas[0] if nth > 0 else 0.
+        phis = self.phis[0] if nph > 0 else 0.
+        dth = self.thetas[1]-self.thetas[0] if nth > 1 else 0.
+        dph = self.phis[1]-self.phis[0] if nph > 1 else 0.
+        return RadPatternSpec(0, nth, nph, 1000, thets, phis, dth, dph)
+
 
 class StructureCurrents:
     def __init__(self, freqs, nr_ants):
@@ -603,6 +633,7 @@ class EEPdata:
         self.excite_val = excite_val  # Amplitude
         self.adm_or_imp = adm_or_imp  # admittance if SC, impedance if OC
         self.adm_or_imp_load = adm_or_imp_load
+        self.pattern_centers = None
 
     def get_admittances(self):
         """\
@@ -717,6 +748,32 @@ class EEPdata:
         eeldata.set_antspat_arr(antspats)
         return eeldata
     
+    def recenter_patterns(self, positions):
+        """\
+        Rereference the EEPs to new pattern centers given by `positions`
+
+        Parameters
+        ----------
+        positions: array_like
+            The new pattern centers in cartesian coordinates.
+            The shape is (nant, 3) where nant is the number of antennas or
+            (3,) if all antennas should be shifted to the same position.
+        """
+        if positions is None:
+            positions = np.zeros(3)
+        # Get the old pattern centers from the EEPs
+        pattern_centers = self.pattern_centers
+        if pattern_centers is None:
+            pattern_centers = np.zeros_like(positions)
+        shift_vecs = positions - pattern_centers
+        # Apply the shift to the EEPs by multiplying with exp(-jkhat.rshift)
+        _eb = ExecutionBlock(freqsteps=self.eeps[0].as_FreqSteps(),
+                             radpat=self.eeps[0].as_RadPatternSpec())
+        sv = calc_steering_vector(shift_vecs, _eb)
+        antspats_reref = self.get_antspats_arr() * np.conj(sv[..., np.newaxis])
+        self.set_antspat_arr(antspats_reref)
+        self.pattern_centers = positions
+
     def rectifying_phase(self):
         """\
         Compute the rectifying phase
@@ -737,8 +794,7 @@ class EEPdata:
         phs_rct = np.angle(antspats[..., 0]**2 + antspats[..., 1]**2)/2
         antspat_rct = antspats * np.exp(-1j*phs_rct[..., np.newaxis])
         return phs_rct, antspat_rct
-    
-    
+
     def __eq__(self, __value: object) -> bool:
         if self.excite_typ != __value.excite_typ:
             return False
@@ -1422,6 +1478,30 @@ class ArrayModel(StructureModel):
         self.elements_tags = [[]]  # Map element nr to its tags 
         self.excited_elements = []
         self._last_elem_tag_nr = self._last_base_tag_nr
+    
+    @classmethod
+    def from_structuremodel(cls, sm):
+        """Create ArrayModel from StructureModel
+        
+        Parameters
+        ----------
+        sm : StructureModel
+            The StructureModel to convert
+
+        Returns
+        -------
+        arr_model : ArrayModel
+            The created ArrayModel
+        """
+
+        #Copy all attributes of StructureModel & init ArrayModel specific ones
+        arr_model = cls(sm.name+'_array')
+        arr_model.groups = sm.groups
+        arr_model.executionblocks = sm.executionblocks
+        arr_model.comments = sm.comments
+        arr_model.ground = sm.ground
+        arr_model._last_base_tag_nr = sm._last_base_tag_nr
+        return arr_model
 
     def _assign_tags_base(self):
         """\
@@ -1609,25 +1689,33 @@ class ArrayModel(StructureModel):
         results = EEP_SC(_eep_sc, _admittances, _vltsrc.value)
         return results
 
-    def calc_steering_vector(self, eep_eb):
-        """Calculate steering vector for array
 
-        Returns
-        -------
-        steering_vectors : (nant, nfr, nth, nph) shaped array
-            Steering vectors, i.e. the vector [exp(j*k_i*r_{la})].T
-            for wavevector k_i (given by direction cosines times wavenumber)
-            and the position vector r_l for all antennas a.
-        """
-        khat = eep_eb.radpat.as_khat()
-        pos = self.arr_delta2arr_pos(self.arr_delta_pos)
-        pos = np.array(pos)  # pos.shape = (nant, xyz)
-        phases_hat = np.matmul(khat, pos.T)  # khat[nth,nph,xyz] pos[nant,xyz]
-                                            # phase_hat.shape = (nth, nph, nant)
-        _freqs = eep_eb.freqsteps.aslist()
-        k = 2*np.pi/3e2*np.array(_freqs)  # k=2pi*freq/c, shape = (nfrq,)
-        phases = k[:, np.newaxis, np.newaxis, np.newaxis] * phases_hat
-        steering_vectors = np.exp(+1j*phases)  # sv[nfrq,nth,nph,nant]
-        steering_vectors = np.moveaxis(steering_vectors, -1, 0)
-        return steering_vectors
+def calc_steering_vector(pos, eep_eb):
+    """Calculate steering vector for array
 
+    Parameters
+    ----------
+    pos : array_like
+        Position vector array with shape (nant, xyz).
+    eep_eb : ExecutionBlock
+        ExecutionBlock object specifying directions and frequencies desired.
+
+    Returns
+    -------
+    steering_vectors : (nant, nfr, nth, nph) shaped array
+        Steering vectors, i.e. the vector [exp(j*k_i*r_{la})].T
+        for wavevector k_i (given by direction cosines times wavenumber)
+        and the position vector r_l for all antennas a.
+    """
+    khat = eep_eb.radpat.as_khat()
+    #pos = self.arr_delta2arr_pos(self.arr_delta_pos)
+    pos = np.array(pos)
+    phases_hat = np.matmul(khat, pos.T)  # khat[nth,nph,xyz] pos[nant,xyz]
+                                        # phase_hat.shape = (nth, nph, nant)
+    _freqs = eep_eb.freqsteps.aslist()
+    # Note that _freqs is in units MHz
+    k = +2*np.pi/3e8*np.array(_freqs)*1e6  # k=2pi*freq/c, shape = (nfrq,)
+    phases = k[:, np.newaxis, np.newaxis, np.newaxis] * phases_hat
+    steering_vectors = -1*np.exp(+1j*phases)  # sv[nfrq,nth,nph,nant]
+    steering_vectors = np.moveaxis(steering_vectors, -1, 0)
+    return steering_vectors
