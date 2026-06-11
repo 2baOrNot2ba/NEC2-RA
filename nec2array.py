@@ -1200,7 +1200,7 @@ class StructureModel:
         """
         if freqsteps == None:
             try:
-                eblst = next(reversed(self.executionblocks.values()))
+                eblst = next(reversed(iter(self.executionblocks.values())))
                 freqsteps = eblst.freqsteps
             except:
                 raise RuntimeError('No freqsteps defined')
