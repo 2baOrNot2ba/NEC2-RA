@@ -1719,3 +1719,106 @@ def calc_steering_vector(pos, eep_eb):
     steering_vectors = -1*np.exp(+1j*phases)  # sv[nfrq,nth,nph,nant]
     steering_vectors = np.moveaxis(steering_vectors, -1, 0)
     return steering_vectors
+
+
+def scalar_prod_sph(sf1, sf2, ths=None, phs=None):
+    """Compute  product of two scalar field on sphere
+    
+    Computes surface integral of conj(sf1)*sf2 over the sphere,
+    where sf1 and sf2 are scalar fields on spherical theta,phi coordinates.
+
+    Parameters
+    ----------
+    sf1 : array_like
+        Field component pattern 1 with shape (nant, nfr, nth, nph)
+    sf2 : array_like
+        Field component pattern 2 with shape (nant, nfr, nth, nph)
+    ths : array_like, optional
+        Theta angles in radians. If None, will be generated from the shape of
+        the field pattern.
+    phs : array_like, optional
+        Phi angles in radians. If None, will be generated from the shape of
+        the field pattern.
+
+    Returns
+    -------
+    scal_prod_sph : array_like
+        Inner product of the two field patterns with shape (nant, nant, nfr)
+    
+    Raises
+    ------
+    ValueError
+        If the field patterns do not have the same shape or if they do not have at least 2 points each in theta and phi.
+
+    Example
+    -------
+    >>> import numpy as np
+    >>> from nec2array import scalar_prod_sph
+    >>> sf1 = np.ones((1, 1, 1000, 1000))
+    >>> out = scalar_prod_sph(sf1, sf1)
+    >>> # Integral of unit pattern should be close to 4*pi:
+    >>> print(np.allclose(out, 4*np.pi,rtol=1e-2))
+    True
+    """
+    sf1 = np.asarray(sf1)
+    sf2 = np.asarray(sf2)
+    if sf1.shape != sf2.shape:
+        raise ValueError('Field patterns must have the same shape')
+    nph = sf1.shape[-1]
+    nth = sf1.shape[-2]
+    if nph < 2 or nth < 2:
+        raise ValueError('Field patterns must have at least 2 points in theta and phi')
+    if ths is None:
+        ths = np.linspace(0, np.pi, sf1.shape[-2])
+    if phs is None:
+        phs = np.linspace(0, 2*np.pi, sf1.shape[-1])
+    dth = ths[1]-ths[0]
+    dph = phs[1]-phs[0]
+    nph = len(phs)
+    sinfac = np.sin(ths)
+    sf2fac = np.conj(sf2)*sinfac[np.newaxis, np.newaxis, :, np.newaxis]*dth*dph
+    inner_product = np.diagonal(np.tensordot(sf1, sf2fac,
+                                             axes=((-2, -1),(-2, -1))), axis1=1, axis2=-1).squeeze()
+    # Special treatment for poles, since sin(theta) = 0 at theta=0 and theta=pi
+    inner_prod_poleN = np.sum(np.conj(sf1[..., 0,:])*sf2[..., 0,:],
+                              axis=-1)/nph
+    inner_prod_poleN *= np.pi*(dth/2)**2
+    inner_prod_poleS = np.sum(np.conj(sf1[..., -1,:])*sf2[..., -1,:],
+                              axis=-1)/nph
+    inner_prod_poleS *= np.pi*(dth/2)**2
+    use_poles = True
+    if use_poles:
+        inner_product = inner_product + inner_prod_poleN  + inner_prod_poleS
+    return inner_product
+
+
+def overlap_integrals(eeps, ths=None, phs=None):
+    """Compute overlap integral of Embedded Element Patterns (EEPs)
+
+    Overlap integrals are the Hermitian inner product of the EEPs and are aka
+    the *beam coupling factors*.
+
+    Note that only the real part is equal to Poynting flux, but since this
+    function can also be used for testing numerical computations,
+    the imaginary part is *not* removed.
+
+    Parameters
+    ----------
+    eeps : array_like
+        Array of embedded element patterns with shape (nant, nfr, nth, nph)
+    ths : array_like, optional
+        Theta angles in radians. If None, will be generated from the shape of
+        the field pattern.
+    phs : array_like, optional
+        Phi angles in radians. If None, will be generated from the shape of
+        the field pattern.
+
+    Returns
+    -------
+    ovlint : array_like
+        Overlap integrals, i.e., the Hermitian inner product of the eeps with shape (nant, nant, nfr).
+    """
+    field2_th = scalar_prod_sph(eeps[..., 0], eeps[..., 0], ths, phs)
+    field2_ph = scalar_prod_sph(eeps[..., 1], eeps[..., 1], ths, phs)
+    ovlint = (field2_th + field2_ph)/(2*ETA0)
+    return ovlint

@@ -5,7 +5,7 @@ import numpy as np
 #matplotlib.use('QtAgg')  # Avoids "RuntimeError: Invalid DISPLAY variable" when running tests in headless environment.
 import matplotlib.pyplot as plt
 from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
-                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC, calc_steering_vector)
+                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC,overlap_integrals)
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -265,7 +265,9 @@ def test_ArrayModel_offcenter():
     eepdat = offcnt.excite_1by1(eb, save_necfile=True)
     ant_nr = 0
     frq_nr = 0
-    eepdat.recenter_patterns(positions=arr_pos)   
+    print('EEP phase:', np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr], deg=True))
+    eepdat.recenter_patterns(positions=arr_pos)
+    print('EEP phase:', np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr], deg=True))
     print('EEPs recentered from origin to ant pos should have phase < 1 deg:',
           np.allclose(np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr],deg=True), 0.,
                       atol=1e0))
@@ -451,6 +453,33 @@ def test_get_antspats():
     plt.show()
 
 
+def test_overlapintegral():
+    """
+    Test of overlap integral calculation for two dipoles
+    """
+    # Use function to build model of lambda half dipole
+    twodip = lamhalfdip_alongZ()
+    # Get the port name...
+    _dipgrpname = list(twodip.groups.keys()).pop()
+    portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
+    # ...and the length of the dipole
+    lamhalf = twodip[_dipgrpname].total_length()/2.
+    fs = FreqSteps('lin', 1, 3e8/(2*lamhalf)/1e6/1.9)  # MHz 
+    nph, nth = 36, 10
+    rps = RadPatternSpec(nth=nth, thets=0., dth=180/nth, nph=nph, phis=0.,
+                         dph=360/nph)
+    twodip.segmentalize(65, fs.max_freq())
+    ex_port = (portname, VoltageSource(1.0))
+    arr_pos = [[0.,0.,0.], [2*lamhalf,0.,0.]]
+    twodip.arrayify(element=['dip'],
+                        array_positions=arr_pos)
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
+    ovint = overlap_integrals(eepdat.get_antspats_arr())
+    print('2 x overlap integral of SC EEPs\n', 2*ovint)
+    print('should be approx. equal to admittance matrix\n',
+          eepdat.get_admittances().squeeze())
+
+
 test_Deck()
 test_Deck_load_necfile()
 test_Deck_exec_pynec()
@@ -464,3 +493,4 @@ test_loaded_lamhalfdip()
 test_tuned_dipole_Array()
 test_dipole_area()
 test_get_antspats()
+test_overlapintegral()
