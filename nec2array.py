@@ -922,7 +922,7 @@ class EEP_NO(EEPdata):
         _ee = deepcopy(self._get_embedded_elements())
         adm_arr = self.get_admittances()
         ap_NO = self.get_antspats_arr()
-        ap_NO = np.expand_dims(np.moveaxis(ap_NO [0], [-1]), -1)
+        ap_NO = np.expand_dims(np.moveaxis(ap_NO, [0], [-1]), -1)
         ap_NO_0 = ap_NO * excite_val / self.current_excite
         if excite_typ == 'SC':
             eepdat_tr = EEP_SC(_ee, np.copy(adm_arr), excite_val)
