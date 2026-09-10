@@ -183,24 +183,23 @@ def test_SC_OC_transforms():
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, [ex_port], rps)
     eep_SC = abradip.calc_eep_SC(eb)
+    # SC -> OC -> SC
     eep_OC = eep_SC.transform_to('OC')
     eep_OC_SC = eep_OC.transform_to('SC')
-    fs2 = FreqSteps('lin', 1, 20.)  # MHz
-    eep_SC2 = abradip.calc_eep_SC(ExecutionBlock(fs2, [ex_port], rps))
-    print("EEPs. Should be False:", eep_SC2 == eep_SC)
-    print("EEPS. Should be True:", eep_OC_SC == eep_SC)
+    print("EEP_SC -> EEP_OC -> EEP_SC:",
+          np.allclose(eep_SC.get_antspats_arr(), eep_OC_SC.get_antspats_arr()))
     eel_SC = eep_SC.get_EELs()
     eel_OC_SC = eep_OC_SC.get_EELs()
-    eel_SC2 = eep_SC2.get_EELs()
-    print("EELs. Should be False:", eel_SC2 == eel_SC)
-    print("EELs. Should be True:", eel_OC_SC == eel_SC)
+    print("EEL_SC -> EEL_OC -> EEL_SC:",
+          np.allclose(eel_SC.get_antspats_arr(), eel_OC_SC.get_antspats_arr()))
     # Thevenin
     load_adm = impedanceRLC(fs.aslist(), 50., None, 1e-12, 'parallel', False)
-    print('LOAD',1/load_adm)
-    eep_NO = eep_SC.transform_to('NO', adm_load=load_adm)
-    eel_NO = eep_NO.get_EELs()
-    print(eel_SC.eels)
-    print(eel_NO.eels)
+    # SC -> NO -> SC
+    eep_SC_NO = eep_SC.transform_to('NO', adm_load=load_adm)
+    eep_SC_NO_SC = eep_SC_NO.transform_to('SC')
+    print('EEP_SC -> EEP_NO -> EEP_SC:',
+          np.allclose(eep_SC.get_antspats_arr(),
+                      eep_SC_NO_SC.get_antspats_arr()))
 
 
 def lamhalfdip_aboveX(rad_lam=None):
