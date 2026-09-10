@@ -928,7 +928,7 @@ class EEP_NO(EEPdata):
             eepdat_tr = EEP_SC(_ee, np.copy(adm_arr), excite_val)
             _adm_arr_ext = np.expand_dims(adm_arr, axis=(1,2,3))
             # Warnick2021 eq. 6
-            antspat_tr = np.linalg.inv(self.adm_load + _adm_arr_ext) @ ap_NO_0
+            antspat_tr = (self.adm_load + _adm_arr_ext) @ ap_NO_0
         elif excite_typ == 'OC':
             raise NotImplementedError('Transform from NO -> OC not implemented')
         elif excite_typ == 'TH':
