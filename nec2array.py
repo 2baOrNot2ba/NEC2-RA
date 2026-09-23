@@ -1777,18 +1777,15 @@ def scalar_prod_sph(sf1, sf2, ths=None, phs=None):
     nph = len(phs)
     sinfac = np.sin(ths)
     sf2fac = np.conj(sf2)*sinfac[np.newaxis, np.newaxis, :, np.newaxis]*dth*dph
-    inner_product = np.diagonal(np.tensordot(sf1, sf2fac,
-                                             axes=((-2, -1),(-2, -1))), axis1=1, axis2=-1).squeeze()
-    # Special treatment for poles, since sin(theta) = 0 at theta=0 and theta=pi
-    inner_prod_poleN = np.sum(np.conj(sf1[..., 0,:])*sf2[..., 0,:],
-                              axis=-1)/nph
-    inner_prod_poleN *= np.pi*(dth/2)**2
-    inner_prod_poleS = np.sum(np.conj(sf1[..., -1,:])*sf2[..., -1,:],
-                              axis=-1)/nph
-    inner_prod_poleS *= np.pi*(dth/2)**2
-    use_poles = True
-    if use_poles:
-        inner_product = inner_product + inner_prod_poleN  + inner_prod_poleS
+    # tensordot computes the inner product over the last two axes of sf1
+    # and sf2fac, which correspond to theta and phi:
+    # (nant1, nfr1, nth1, nph1) x (nant2, nfr2, nth2, nph2)
+    #   -> (nant1, nfr1, nant2, nfr2)
+    inner_product = np.tensordot(sf1, sf2fac, axes=((-2, -1),(-2, -1))) 
+    # diagonal make the two frequency indices equal,
+    # and squeeze removes the singleton dimension:
+    # (nant1, nfr1, nant2, nfr2) -> (nant1, nant2, nfr1)
+    inner_product = np.diagonal(inner_product, axis1=1, axis2=-1).squeeze()
     return inner_product
 
 
