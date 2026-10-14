@@ -470,7 +470,9 @@ def test_overlapintegral():
                          dph=360/nph)
     twodip.segmentalize(65, fs.max_freq())
     ex_port = (portname, VoltageSource(1.0))
-    arr_pos = [[0.,0.,0.], [2*lamhalf,0.,0.]]
+    # Dipoles are X-aligned so displace along Y in order to get
+    # non-zero displacement phase in overlap integral between ants 1 and 2:
+    arr_pos = [[0.,0.,0.], [2.75*lamhalf,0,0.]]
     twodip.arrayify(element=['dip'],
                         array_positions=arr_pos)
     eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
