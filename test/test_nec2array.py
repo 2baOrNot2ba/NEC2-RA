@@ -231,7 +231,7 @@ def lamhalfdip_aboveX(rad_lam=None):
 
 def lamhalfdip_alongZ(w_radii=1e-5):
     """
-    StructureModel of 1m dipole placed at origin aligned with Z
+    ArrayModel of 1m dipole placed at origin aligned with Z
     
     Parameters
     ----------
@@ -457,7 +457,8 @@ def test_overlapintegral():
     Test of overlap integral calculation for two dipoles
     """
     # Use function to build model of lambda half dipole
-    twodip = lamhalfdip_alongZ()
+    dip_sm, _ = lamhalfdip_aboveX()
+    twodip = ArrayModel('2dipoles').from_structuremodel(dip_sm)
     # Get the port name...
     _dipgrpname = list(twodip.groups.keys()).pop()
     portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
