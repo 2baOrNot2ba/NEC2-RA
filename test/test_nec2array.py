@@ -475,7 +475,8 @@ def test_overlapintegral():
                         array_positions=arr_pos)
     eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
     ovint = overlap_integrals(eepdat.get_antspats_arr())
-    print('2 x overlap integral of SC EEPs\n', 2*ovint)
+    V0 = eepdat.voltage_excite
+    print('2 x overlap integral of SC EEPs\n', 2*ovint/(np.abs(V0)**2))
     print('should be approx. equal to admittance matrix\n',
           eepdat.get_admittances().squeeze())
 
