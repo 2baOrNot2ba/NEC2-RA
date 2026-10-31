@@ -5,7 +5,7 @@ import numpy as np
 #matplotlib.use('QtAgg')  # Avoids "RuntimeError: Invalid DISPLAY variable" when running tests in headless environment.
 import matplotlib.pyplot as plt
 from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
-                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC, calc_steering_vector)
+                  FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC,overlap_integrals)
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -183,24 +183,23 @@ def test_SC_OC_transforms():
     rps = RadPatternSpec(nth=1, thets=90., dth=0., nph=1, phis=0., dph=0.)
     eb = ExecutionBlock(fs, [ex_port], rps)
     eep_SC = abradip.calc_eep_SC(eb)
+    # SC -> OC -> SC
     eep_OC = eep_SC.transform_to('OC')
     eep_OC_SC = eep_OC.transform_to('SC')
-    fs2 = FreqSteps('lin', 1, 20.)  # MHz
-    eep_SC2 = abradip.calc_eep_SC(ExecutionBlock(fs2, [ex_port], rps))
-    print("EEPs. Should be False:", eep_SC2 == eep_SC)
-    print("EEPS. Should be True:", eep_OC_SC == eep_SC)
+    print("EEP_SC -> EEP_OC -> EEP_SC:",
+          np.allclose(eep_SC.get_antspats_arr(), eep_OC_SC.get_antspats_arr()))
     eel_SC = eep_SC.get_EELs()
     eel_OC_SC = eep_OC_SC.get_EELs()
-    eel_SC2 = eep_SC2.get_EELs()
-    print("EELs. Should be False:", eel_SC2 == eel_SC)
-    print("EELs. Should be True:", eel_OC_SC == eel_SC)
+    print("EEL_SC -> EEL_OC -> EEL_SC:",
+          np.allclose(eel_SC.get_antspats_arr(), eel_OC_SC.get_antspats_arr()))
     # Thevenin
     load_adm = impedanceRLC(fs.aslist(), 50., None, 1e-12, 'parallel', False)
-    print('LOAD',1/load_adm)
-    eep_NO = eep_SC.transform_to('NO', adm_load=load_adm)
-    eel_NO = eep_NO.get_EELs()
-    print(eel_SC.eels)
-    print(eel_NO.eels)
+    # SC -> NO -> SC
+    eep_SC_NO = eep_SC.transform_to('NO', adm_load=load_adm)
+    eep_SC_NO_SC = eep_SC_NO.transform_to('SC')
+    print('EEP_SC -> EEP_NO -> EEP_SC:',
+          np.allclose(eep_SC.get_antspats_arr(),
+                      eep_SC_NO_SC.get_antspats_arr()))
 
 
 def lamhalfdip_aboveX(rad_lam=None):
@@ -232,7 +231,7 @@ def lamhalfdip_aboveX(rad_lam=None):
 
 def lamhalfdip_alongZ(w_radii=1e-5):
     """
-    StructureModel of 1m dipole placed at origin aligned with Z
+    ArrayModel of 1m dipole placed at origin aligned with Z
     
     Parameters
     ----------
@@ -265,7 +264,9 @@ def test_ArrayModel_offcenter():
     eepdat = offcnt.excite_1by1(eb, save_necfile=True)
     ant_nr = 0
     frq_nr = 0
-    eepdat.recenter_patterns(positions=arr_pos)   
+    print('EEP phase:', np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr], deg=True))
+    eepdat.recenter_patterns(positions=arr_pos)
+    print('EEP phase:', np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr], deg=True))
     print('EEPs recentered from origin to ant pos should have phase < 1 deg:',
           np.allclose(np.angle(eepdat.eeps[ant_nr].f_tht[frq_nr],deg=True), 0.,
                       atol=1e0))
@@ -451,6 +452,37 @@ def test_get_antspats():
     plt.show()
 
 
+def test_overlapintegral():
+    """
+    Test of overlap integral calculation for two dipoles
+    """
+    # Use function to build model of lambda half dipole
+    dip_sm, _ = lamhalfdip_aboveX()
+    twodip = ArrayModel('2dipoles').from_structuremodel(dip_sm)
+    # Get the port name...
+    _dipgrpname = list(twodip.groups.keys()).pop()
+    portname = list(twodip[_dipgrpname].get_ports().keys()).pop()
+    # ...and the length of the dipole
+    lamhalf = twodip[_dipgrpname].total_length()/2.
+    fs = FreqSteps('lin', 1, 3e8/(2*lamhalf)/1e6/1.9)  # MHz 
+    nph, nth = 36, 10
+    rps = RadPatternSpec(nth=nth, thets=0., dth=180/nth, nph=nph, phis=0.,
+                         dph=360/nph)
+    twodip.segmentalize(65, fs.max_freq())
+    ex_port = (portname, VoltageSource(1.0))
+    # Dipoles are X-aligned so displace along Y in order to get
+    # non-zero displacement phase in overlap integral between ants 1 and 2:
+    arr_pos = [[0.,0.,0.], [2.75*lamhalf,0,0.]]
+    twodip.arrayify(element=['dip'],
+                        array_positions=arr_pos)
+    eepdat = twodip.excite_1by1(ExecutionBlock(fs, ex_port, rps))
+    ovint = overlap_integrals(eepdat.get_antspats_arr())
+    V0 = eepdat.voltage_excite
+    print('2 x overlap integral of SC EEPs\n', 2*ovint/(np.abs(V0)**2))
+    print('should be approx. equal to admittance matrix\n',
+          eepdat.get_admittances().squeeze())
+
+
 test_Deck()
 test_Deck_load_necfile()
 test_Deck_exec_pynec()
@@ -464,3 +496,4 @@ test_loaded_lamhalfdip()
 test_tuned_dipole_Array()
 test_dipole_area()
 test_get_antspats()
+test_overlapintegral()
