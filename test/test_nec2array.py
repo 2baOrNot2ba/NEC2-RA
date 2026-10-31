@@ -1,8 +1,6 @@
 import sys
 from io import StringIO
 import numpy as np
-#import matplotlib
-#matplotlib.use('QtAgg')  # Avoids "RuntimeError: Invalid DISPLAY variable" when running tests in headless environment.
 import matplotlib.pyplot as plt
 from nec2array import (ArrayModel, StructureModel, Deck, Wire, VoltageSource,
                   FreqSteps, ExecutionBlock, RadPatternSpec, impedanceRLC,overlap_integrals)
@@ -223,7 +221,7 @@ def lamhalfdip_aboveX(rad_lam=None):
     p2 = (+dip_len/2, 0., lamhalf/2.)
     l12 = (p1, p2)
     dip = StructureModel('lamhalfdip')
-    dip['dip']['X'] = Wire(*l12, w_radii).add_port(0.5,'VS')
+    dip['dip']['X'] = Wire(*l12, w_radii).add_port(0.5, 'VS')
     freq = 3e8/(2*lamhalf)
     dip.segmentalize(65, freq/1e6)
     return dip, freq
@@ -239,7 +237,6 @@ def lamhalfdip_alongZ(w_radii=1e-5):
         Wire radius in meters.
     """
     dip_len = 1.0
-    lamhalf = dip_len
     p1 = (0., 0., -dip_len/2)
     p2 = (0., 0., +dip_len/2)
     l12 = (p1, p2)
