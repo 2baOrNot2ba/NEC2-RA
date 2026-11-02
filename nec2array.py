@@ -673,8 +673,10 @@ class EEPdata:
             polnr=0 is theta and polnr=1 is phi.
         """
         eep_list = self._get_embedded_elements()
-        f_tht_mat = np.array([np.atleast_3d(_nec.f_tht) for _nec in eep_list if _nec is not None])
-        f_phi_mat = np.array([np.atleast_3d(_nec.f_phi) for _nec in eep_list if _nec is not None])
+        f_tht_mat = np.array([np.atleast_3d(_nec.f_tht) for _nec in eep_list
+                              if _nec is not None])
+        f_phi_mat = np.array([np.atleast_3d(_nec.f_phi) for _nec in eep_list
+                              if _nec is not None])
         antspats = np.stack((f_tht_mat, f_phi_mat), axis=-1)
         if antspats.shape[-3] == 0:
             # In the case that there is no radiation patterns,
@@ -755,8 +757,6 @@ class EEPdata:
         eeldata.set_antspat_arr(antspats)
         return eeldata
 
-
-    
     def recenter_patterns(self, positions):
         """\
         Rereference the EEPs to new pattern centers given by `positions`
@@ -805,7 +805,6 @@ class EEPdata:
         return phs_rct, antspat_rct
 
     def __eq__(self, __value: object) -> bool:
-        print('EX')
         if self.excite_typ != __value.excite_typ:
             return False
         other_eeps = __value._get_embedded_elements()
