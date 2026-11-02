@@ -668,13 +668,13 @@ class EEPdata:
         Returns
         -------
         antspats: array
-            The radiation patterns for all antennas.
+            The radiation patterns for all antennas with EEP.
             The indices are [antnr, freqnr, thetanr, phinr, polnr]
             polnr=0 is theta and polnr=1 is phi.
         """
         eep_list = self._get_embedded_elements()
-        f_tht_mat = np.array([np.atleast_3d(_nec.f_tht) for _nec in eep_list])
-        f_phi_mat = np.array([np.atleast_3d(_nec.f_phi) for _nec in eep_list])
+        f_tht_mat = np.array([np.atleast_3d(_nec.f_tht) for _nec in eep_list if _nec is not None])
+        f_phi_mat = np.array([np.atleast_3d(_nec.f_phi) for _nec in eep_list if _nec is not None])
         antspats = np.stack((f_tht_mat, f_phi_mat), axis=-1)
         if antspats.shape[-3] == 0:
             # In the case that there is no radiation patterns,
@@ -685,9 +685,12 @@ class EEPdata:
         return antspats
     
     def set_antspat_arr(self, antspat):
-        for antnr, _eep in enumerate(self._get_embedded_elements()):
-            _eep.f_tht = antspat[antnr, ..., 0]
-            _eep.f_phi = antspat[antnr, ..., 1]
+        for _eep in self._get_embedded_elements():
+            ant_idx = 0
+            if _eep is not None:
+                _eep.f_tht = antspat[ant_idx, ..., 0]
+                _eep.f_phi = antspat[ant_idx, ..., 1]
+            ant_idx += 1
 
     def get_pow_arr(self):
         if self.excite_typ == 'SC':
@@ -725,7 +728,9 @@ class EEPdata:
             excite_val = self.voltage_excite
             adm_or_imp = self.impedances
             adm_or_imp_load = self.imp_load
-        freqs = self.eeps[0].freqs
+        non_none_antnr = next(antnr for antnr, _ee in enumerate(self.eeps)
+                              if _ee is not None)
+        freqs = self.eeps[non_none_antnr].freqs
         freqs = np.array(freqs)[:, np.newaxis, np.newaxis, np.newaxis]  # Brdcst
         # Template EELdata initialized with self.eeps which get overwritten
         # after tranformated eeps are calculated.
@@ -733,6 +738,8 @@ class EEPdata:
         # independently of self.
         _ees = deepcopy(self.eeps)
         for _ee in _ees:
+            if _ee is None:
+                continue
             if self.excite_typ == 'OC' or self.excite_typ == 'NO':
                 _ee.f_type = 'Length'
             elif self.excite_typ == 'SC' or self.excite_typ == 'TH':
@@ -747,6 +754,8 @@ class EEPdata:
             antspats = np.moveaxis(antspats.squeeze(-1), [-1], [0])
         eeldata.set_antspat_arr(antspats)
         return eeldata
+
+
     
     def recenter_patterns(self, positions):
         """\
@@ -796,6 +805,7 @@ class EEPdata:
         return phs_rct, antspat_rct
 
     def __eq__(self, __value: object) -> bool:
+        print('EX')
         if self.excite_typ != __value.excite_typ:
             return False
         other_eeps = __value._get_embedded_elements()
@@ -869,6 +879,40 @@ class EEP_SC(EEPdata):
         antspat_tr = np.moveaxis(antspat_tr.squeeze(-1), [-1], [0])
         eepdat_tr.set_antspat_arr(antspat_tr)
         return eepdat_tr
+
+    @classmethod
+    def merge(cls, list_eep_sc):
+        """\
+        Merge a list of EEP_SC objects into one EEP_SC object
+
+        This is useful when the EEP_SC objects are generated from single
+        excitation run in parallel, using ArrayModel's excite_1by1() method
+        in a multi-processing environment, and the results need to be merged
+        into one EEP_SC object for whole array.
+
+        Parameters
+        ----------
+        list_eep_sc: list of EEP_SC objects
+            The EEP_SC objects to merge.
+
+        Returns
+        -------
+        merged_eep_sc: EEP_SC
+            New EEP_SC object with merged data.
+        """
+        # Create a new list of EEPs for the merged object
+        merged_eeps = []
+        for eepdat in list_eep_sc:
+            _eeps = [_e for _e in eepdat._get_embedded_elements()
+                     if _e is not None]
+            merged_eeps.extend(_eeps)
+        merged_adm = list_eep_sc[0].get_admittances()
+        print('merged_adm shape:', merged_adm.shape)
+        for antnr, eepdat in enumerate(list_eep_sc):
+            merged_adm[:, :, antnr] = eepdat.get_admittances()[:, :, antnr]
+        return cls(merged_eeps, merged_adm,
+                   list_eep_sc[0].voltage_excite)
+
 
 
 class EEP_OC(EEPdata):
@@ -1618,7 +1662,8 @@ class ArrayModel(StructureModel):
     def as_neccards(self):
         return super().as_neccards(exclude_groups=self.element)
 
-    def excite_1by1(self, eep_eb, save_necfile=False, print_prog=False):
+    def excite_1by1(self, eep_eb, sel_ants=None, save_necfile=False,
+                    print_prog=False):
         """\
         Excite elements one at a time to obtain embedded element properties
 
@@ -1633,6 +1678,8 @@ class ArrayModel(StructureModel):
         eep_eb : ExecutionBlock
             The execution block to used to compute the EEPs. Should have at
             least one excited port with an arbitary voltage value.
+        sel_ants : list of int, optional
+            List of antenna indices to excite. If None, all antennas are excited.
         save_nec : bool
             Save as a NEC file
         print_prog : bool
@@ -1652,9 +1699,15 @@ class ArrayModel(StructureModel):
         _eep_sc = []
         _admittances = np.zeros((len(freqs), nr_ants, nr_ants), complex)
         sc = StructureCurrents(freqs, nr_ants)
+        sel_ants = list(range(nr_ants)) if sel_ants is None else sel_ants
         for antnr in range(nr_ants):
+            # If this antenna is not in the list of antennas to excite, set its # eep_sc to None and admittance to zero, and skip to next antenna
+            if antnr not in sel_ants:
+                _eep_sc.append(None)
+                _admittances[:,:,antnr] = np.zeros_like(_admittances[:,:,antnr])
+                continue
             if print_prog:
-                print(f'Exciting antenna {antnr}/{nr_ants}', end='\r',
+                print(f'Exciting antenna {antnr}/{nr_ants}', end='\n',
                       flush=True)
             _prt_exc = ((antnr, _exciteport_name), _vltsrc)
             _xb = ExecutionBlock(_frq_cntr_step, [_prt_exc], _rad_pat,
