@@ -776,8 +776,9 @@ class EEPdata:
             pattern_centers = np.zeros_like(positions)
         shift_vecs = positions - pattern_centers
         # Apply the shift to the EEPs by multiplying with exp(-jkhat.rshift)
-        _eb = ExecutionBlock(freqsteps=self.eeps[0].as_FreqSteps(),
-                             radpat=self.eeps[0].as_RadPatternSpec())
+        _emb_elms = self._get_embedded_elements()
+        _eb = ExecutionBlock(freqsteps=_emb_elms[0].as_FreqSteps(),
+                             radpat=_emb_elms[0].as_RadPatternSpec())
         sv = calc_steering_vector(shift_vecs, _eb)
         antspats_reref = self.get_antspats_arr() * np.conj(sv[..., np.newaxis])
         self.set_antspat_arr(antspats_reref)
