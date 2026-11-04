@@ -1018,6 +1018,7 @@ class EELdata(EEPdata):
         self.adm_or_imp = adm_or_imp
         self.excite_typ = excite_typ
         self.adm_or_imp_load = adm_or_imp_load
+        self.pattern_centers = None
 
     def _get_embedded_elements(self):
         return self.eels
