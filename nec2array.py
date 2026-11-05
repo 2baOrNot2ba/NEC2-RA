@@ -687,8 +687,8 @@ class EEPdata:
         return antspats
     
     def set_antspat_arr(self, antspat):
+        ant_idx = 0
         for _eep in self._get_embedded_elements():
-            ant_idx = 0
             if _eep is not None:
                 _eep.f_tht = antspat[ant_idx, ..., 0]
                 _eep.f_phi = antspat[ant_idx, ..., 1]
@@ -907,7 +907,6 @@ class EEP_SC(EEPdata):
                      if _e is not None]
             merged_eeps.extend(_eeps)
         merged_adm = list_eep_sc[0].get_admittances()
-        print('merged_adm shape:', merged_adm.shape)
         for antnr, eepdat in enumerate(list_eep_sc):
             merged_adm[:, :, antnr] = eepdat.get_admittances()[:, :, antnr]
         return cls(merged_eeps, merged_adm,
